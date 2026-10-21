@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comictranslate-it"
+version = "0.1.0"
+description = "Conservative comic lettering workflow for English-to-Italian CBZ/CBR"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "ComicTranslate IT contributors"}]
+dependencies = ["Pillow>=10.0,<13", "numpy>=1.24,<3", "opencv-python-headless>=4.8,<5", "pytesseract>=0.3.10,<1"]
+
+[project.optional-dependencies]
+cbr = ["rarfile>=4.1,<5"]
+cloud = ["requests>=2.31,<3"]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+comictranslate = "comictranslate_it.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
