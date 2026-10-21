@@ -1,0 +1,18 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+*.cbz
+*.cbr
+*.cba
+*.report.json
+*.project.json
+*.tmp
+*.part
+.env
+*.log
+# Synthetic fixtures can be versioned; never include real copyrighted archives.
+!examples/demo_en.cbz
+!examples/demo.project.json
