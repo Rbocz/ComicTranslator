@@ -124,39 +124,47 @@ def layout_text(region: Region, size: tuple[int,int], font_path: str | None = No
     words=(region.italian.upper() if region.uppercase else region.italian).split()
     if not words:
         raise LayoutError("Traduzione italiana assente")
+    # Rank feasible layouts before allocating large antialiased glyph masks.
+    # A reference profile affects font size / line count, not only line breaks.
+    candidates_pool=[]
     for fontsize in range(region.font_size_max,region.font_size_min-1,-1):
         font=get_font(fontsize,font_path)
         ascent,descent=font.getmetrics()
-        line_height=max(fontsize+2, int((ascent+descent)*1.04))
+        line_height=max(fontsize+2,int((ascent+descent)*1.04))
         maxlines=min(16,len(words),int((bounds[3]-bounds[1])/line_height))
-        candidates=([region.preferred_lines] if 1 <= region.preferred_lines <= maxlines else [])
+        candidates=([region.preferred_lines] if 1<=region.preferred_lines<=maxlines else [])
         candidates += [n for n in range(1,maxlines+1) if n not in candidates]
         for numlines in candidates:
             centers_y=[center_y+(i-(numlines-1)/2)*line_height for i in range(numlines)]
             intervals=[]
             for cy in centers_y:
-                # Testing a band of glyph height is more reliable than testing the central row.
                 half=max(4,int(fontsize*.48))
                 interval=_largest_interval(safe,int(cy-half),int(cy+half)+1)
                 if not interval:
                     intervals=[];break
                 intervals.append(interval)
-            if len(intervals)!=numlines:
-                continue
+            if len(intervals)!=numlines:continue
             caps=[max(0,b-a-2) for a,b in intervals]
             lines=_best_breaks(words,caps,font,target_fill)
-            if lines is None:
-                continue
-            ink=Image.new("L",(w,h),0)
-            drawer=ImageDraw.Draw(ink)
-            positions=[]
-            for line,(a,b),cy in zip(lines,intervals,centers_y):
-                cx=(a+b)/2
-                drawer.text((cx,cy),line,font=font,fill=255,anchor="mm",stroke_width=0)
-                positions.append((cx,cy))
-            pix=np.asarray(ink)
-            # Exact pixel-level safety invariant on rendered glyph coverage.
-            if np.any((pix>0) & (safe==0)):
-                continue
-            return Layout(fontsize,lines,positions,ink)
+            if lines is None:continue
+            fills=[font.getlength(line)/cap for line,cap in zip(lines,caps)]
+            density=sum((fill-target_fill)**2 for fill in fills)/len(fills)
+            size_cost=.16*((region.font_size_max-fontsize)/region.font_size_max)**2
+            preferred_cost=(.018*abs(region.preferred_lines-numlines)
+                            if region.preferred_lines else 0.0)
+            score=density+size_cost+preferred_cost
+            candidates_pool.append((score,-fontsize,fontsize,font,lines,intervals,centers_y))
+    # Only pixels inside the exact allowed balloon may be rendered, no matter
+    # how appealing the ranking score happens to be.
+    for _,_,fontsize,font,lines,intervals,centers_y in sorted(candidates_pool,key=lambda x:(x[0],x[1])):
+        ink=Image.new("L",(w,h),0)
+        drawer=ImageDraw.Draw(ink)
+        positions=[]
+        for line,(a,b),cy in zip(lines,intervals,centers_y):
+            cx=(a+b)/2
+            drawer.text((cx,cy),line,font=font,fill=255,anchor="mm",stroke_width=0)
+            positions.append((cx,cy))
+        pix=np.asarray(ink)
+        if np.any((pix>0)&(safe==0)):continue
+        return Layout(fontsize,lines,positions,ink)
     raise LayoutError("Testo non inseribile nell'area: abbreviare la traduzione o modificare il balloon")
