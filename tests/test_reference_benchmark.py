@@ -61,3 +61,12 @@ def test_lettering_profile_is_bounded():
     r=Region(id="a",balloon=Rect(5,5,190,105),italian="CIAO")
     with pytest.raises(ValueError):
         layout_text(r,(200,120),target_fill=.1)
+
+
+def test_style_changes_selected_line_breaks():
+    region=Region(id="demo",balloon=Rect(3,3,207,97),
+                  italian="MI CHIAMO ALFRED PENNYWORTH",
+                  font_size_max=40,font_size_min=10,margin=7)
+    spacious=layout_text(region,(210,100),target_fill=.50)
+    dense=layout_text(region,(210,100),target_fill=.85)
+    assert spacious.lines!=dense.lines
