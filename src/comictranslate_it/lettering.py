@@ -73,7 +73,7 @@ def _largest_interval(mask: np.ndarray, y1: int, y2: int):
     return max(spans,key=lambda p:p[1]-p[0])
 
 
-def _best_breaks(words: list[str], caps: list[float], font):
+def _best_breaks(words: list[str], caps: list[float], font, target_fill: float = .68):
     n=len(caps)
     @lru_cache(None)
     def fit(line: int, start: int):
@@ -92,7 +92,7 @@ def _best_breaks(words: list[str], caps: list[float], font):
                 continue
             ratio=width/caps[line]
             # Prefer centered/comparable line lengths. Strongly disfavor isolated short words.
-            penalty=((ratio-.68)**2)*14 + (4 if stop-start==1 and len(words)>n else 0)
+            penalty=((ratio-target_fill)**2)*14 + (4 if stop-start==1 and len(words)>n else 0)
             if line == n-1 and ratio < .30:
                 penalty+=5
             score=penalty+rest[0]
@@ -103,11 +103,13 @@ def _best_breaks(words: list[str], caps: list[float], font):
     return result[1] if result else None
 
 
-def layout_text(region: Region, size: tuple[int,int], font_path: str | None = None):
+def layout_text(region: Region, size: tuple[int,int], font_path: str | None = None, target_fill: float = .68):
     """Return layout only when the exact final glyph alpha stays within safe polygon.
 
     Never scale glyphs horizontally or render outside the region to force a fit.
     """
+    if not 0.45 <= target_fill <= 0.90:
+        raise LayoutError("Profilo lettering fuori intervallo")
     if not region.italian.strip():
         raise LayoutError("Traduzione italiana assente")
     if region.font_size_min < 8 or region.font_size_max < region.font_size_min:
@@ -142,7 +144,7 @@ def layout_text(region: Region, size: tuple[int,int], font_path: str | None = No
             if len(intervals)!=numlines:
                 continue
             caps=[max(0,b-a-2) for a,b in intervals]
-            lines=_best_breaks(words,caps,font)
+            lines=_best_breaks(words,caps,font,target_fill)
             if lines is None:
                 continue
             ink=Image.new("L",(w,h),0)
