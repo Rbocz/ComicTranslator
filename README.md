@@ -25,6 +25,12 @@ pytest -q
 ## Limiti
 Rilevamento e OCR non sono completi su balloon colorati e lettering elaborato. Pulizia OpenCV su sfondi complessi può lasciare artefatti. Il lettering è ancora monostile nero. Le traduzioni API richiedono revisione. Nessuna regione viene alterata se non è approvata e verificata dal motore. Usare solamente fumetti per i quali si possiedono i diritti necessari.
 
+## Benchmark su edizioni tradotte (v0.2 sperimentale)
+
+È disponibile un confronto **offline** di pagine inglesi e italiane, anche quando l'originale inglese contiene due pagine impilate. Il comando `reference-eval` calcola la trasformazione geometrica tramite SIFT/RANSAC e stima il riempimento tipografico delle righe italiane. `reference-profile` aggrega le misure; `apply-profile` memorizza nel progetto il riempimento medio desiderato, che il letterer usa come preferenza per suddividere le righe.
+
+Vedi [la guida completa](docs/REFERENCE_BENCHMARK.md). Sono necessarie poche righe leggibili con Tesseract `ita`: non è addestramento di una rete neurale. **Le scansioni originali non sono incluse nel repository.**
+
 ## Roadmap
 1. Benchmark controllato sui comics occidentali.
 2. Detector specifico e OCR robusto.
