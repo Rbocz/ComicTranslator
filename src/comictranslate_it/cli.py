@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from .project import Project
 from .pipeline import scan, translate, export
+from .reference_benchmark import evaluate, write_profile
 
 
 def main(argv=None):
@@ -22,6 +23,13 @@ def main(argv=None):
     ex.add_argument("--font",default=None)
     gu=sub.add_parser("gui",help="Editor per revisione, approvazione e anteprima")
     gu.add_argument("project")
+    rv=sub.add_parser("reference-eval",help="Confronta offline una pagina inglese e quella italiana")
+    rv.add_argument("english");rv.add_argument("italian");rv.add_argument("--part",type=int,default=1)
+    rv.add_argument("--out",required=True);rv.add_argument("--overlay",default=None)
+    rp=sub.add_parser("reference-profile",help="Calibra il lettering da misure di tavole già tradotte")
+    rp.add_argument("reports",nargs="+");rp.add_argument("--out",required=True)
+    ap=sub.add_parser("apply-profile",help="Associa un profilo misurato al progetto")
+    ap.add_argument("project");ap.add_argument("profile")
     args=parser.parse_args(argv)
     try:
         if args.action=="init":
@@ -37,6 +45,24 @@ def main(argv=None):
             blocked=sum(not r["applied"] for p in log for r in p["regions"])
             print(f"Scritto {args.output}. Balloon applicati: {success}; non applicati: {blocked}")
             print(f"Controlli: {Path(args.output).with_suffix('.report.json')}")
+        elif args.action=="reference-eval":
+            result=evaluate(args.english,args.italian,args.part,args.overlay)
+            Path(args.out).parent.mkdir(parents=True,exist_ok=True)
+            Path(args.out).write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
+            print(f"Rilevati {result['candidate_balloon_count']} balloon; inliers: {result['alignment']['inliers']}. Report: {args.out}")
+        elif args.action=="reference-profile":
+            reports=[json.loads(Path(p).read_text(encoding="utf-8")) for p in args.reports]
+            result=write_profile(reports,args.out)
+            print(f"Profilo su {result['sample_balloon_count']} balloon: fill={result['target_line_fill']}")
+        elif args.action=="apply-profile":
+            data=json.loads(Path(args.profile).read_text(encoding="utf-8"))
+            fill=data.get("target_line_fill")
+            if not isinstance(fill,(float,int)) or not 0.45<=fill<=0.90:
+                raise ValueError("Profilo lettering non valido")
+            p=Project.load(args.project)
+            p.lettering_profile={"target_line_fill":float(fill)}
+            p.save()
+            print(f"Profilo impostato: {fill}")
         elif args.action=="gui":
             from .gui import launch
             launch(args.project)
