@@ -16,6 +16,7 @@ class Project:
     version: int = PROJECT_VERSION
     glossary: dict[str, str] = field(default_factory=dict)
     path: Path | None = None
+    lettering_profile: dict = field(default_factory=dict)
 
     @classmethod
     def create(cls, source: str, project_path: str):
@@ -38,7 +39,7 @@ class Project:
         if not source.is_absolute():
             source = file.parent / source
         return cls(str(source.resolve()), [Page.from_dict(p) for p in data["pages"]],
-                   data["version"], data.get("glossary", {}), file)
+                   data["version"], data.get("glossary", {}), file, data.get("lettering_profile", {}))
 
     def save(self, path: str | None = None):
         file = Path(path or self.path or "project.json").resolve()
@@ -50,7 +51,8 @@ class Project:
             # Windows: source and project can live on separate drive letters.
             relative = str(source)
         data = {"version": self.version, "source": relative,
-                "pages": [page.to_dict() for page in self.pages], "glossary": self.glossary}
+                "pages": [page.to_dict() for page in self.pages], "glossary": self.glossary,
+                "lettering_profile": self.lettering_profile}
         temp = file.with_suffix(file.suffix + ".tmp")
         temp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
         os.replace(temp, file)
