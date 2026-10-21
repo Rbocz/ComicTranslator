@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "sample_balloon_count": 10,
+  "target_line_fill": 0.756,
+  "method": "median OCR line width / available balloon span",
+  "warning": "Experimental style preference from three private reference page pairs; not model training."
+}
