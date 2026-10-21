@@ -67,7 +67,7 @@ def erase_text(rgb: np.ndarray, region: Region, safe: np.ndarray):
 
 
 def render_page(image: Image.Image, regions: list[Region], font_path: str | None=None,
-                approval_required: bool=True):
+                approval_required: bool=True, target_fill: float=.68):
     """Preserve image where no approved mask/glyph ink overlaps.
 
     Failed regions are skipped entirely; the original never gets a partial erase.
@@ -87,7 +87,7 @@ def render_page(image: Image.Image, regions: list[Region], font_path: str | None
             continue
         try:
             safe=balloon_mask((image.width,image.height),region)
-            layout=layout_text(region,(image.width,image.height),font_path)
+            layout=layout_text(region,(image.width,image.height),font_path,target_fill)
             erased,erase_mask,method=erase_text(current,region,safe)
             alpha=np.asarray(layout.ink_mask,dtype=np.uint8)
             if np.any((alpha>0) & (safe==0)):
