@@ -34,9 +34,10 @@ def frozen_startup_test(marker: str) -> int:
             storage_button_visible = (
                 ui.storage_picker.winfo_manager() == "pack"
                 and ui.storage_entry.winfo_manager() == "pack"
-                and ui.storage_picker.winfo_rooty() < ui.launch_button.winfo_rooty()
-                and ui.storage_picker.winfo_rooty() + ui.storage_picker.winfo_height()
-                <= ui.root.winfo_rooty() + ui.root.winfo_height()
+                and ui.storage_picker.master.winfo_manager() == "pack"
+                and ui.storage_picker.master in ui.launch_button.master.pack_slaves()
+                and ui.launch_button.master.pack_slaves().index(ui.storage_picker.master)
+                    < ui.launch_button.master.pack_slaves().index(ui.launch_button)
             )
             if not storage_button_visible:
                 raise RuntimeError("Storage folder picker is missing or hidden in the main window")
