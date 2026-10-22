@@ -29,3 +29,34 @@ def test_annotation_editor_ui_opens_and_saves(tmp_path):
         assert destination.exists()
     finally:
         app.root.destroy()
+
+
+def test_editor_image_uses_its_canvas_tk_interpreter(tmp_path):
+    """Regression: the launcher and the editor use two distinct Tk roots.
+
+    ImageTk.PhotoImage must be created in the editor canvas' interpreter,
+    or Windows displays: image "pyimage1" doesn't exist.
+    """
+    import tkinter as tk
+    if os.name != 'nt' and not os.environ.get('DISPLAY'):
+        pytest.skip('Tkinter display unavailable')
+    from comictranslate_it.annotation_editor import AnnotationEditor
+    image = Image.new('RGB', (240, 160), 'white')
+    blob = io.BytesIO()
+    image.save(blob, 'PNG')
+    archive = tmp_path / 'two_windows.cbz'
+    with zipfile.ZipFile(archive, 'w') as target:
+        target.writestr('page1.png', blob.getvalue())
+    launcher_root = tk.Tk()
+    editor = None
+    try:
+        editor = AnnotationEditor(str(archive), str(tmp_path / 'annotations.json'))
+        editor.root.update_idletasks()
+        editor._redraw()
+        assert editor.root.tk.call('image', 'type', str(editor.photo)) == 'photo'
+        assert editor.photo.tk is editor.canvas.tk
+        assert editor.photo.tk is not launcher_root.tk
+    finally:
+        if editor is not None:
+            editor.root.destroy()
+        launcher_root.destroy()

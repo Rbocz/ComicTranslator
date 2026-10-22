@@ -38,23 +38,27 @@ class AnnotationEditor:
         self.pending=[]
         self.start=None
         self.root=tk.Tk()
-        self.kind=tk.StringVar(value='dialogue')
-        self.draw_mode=tk.StringVar(value='polygon')
-        self.show_proposals=tk.BooleanVar(value=True)
-        self.verified=tk.BooleanVar(value=False)
+        self.kind=tk.StringVar(master=self.root, value='dialogue')
+        self.draw_mode=tk.StringVar(master=self.root, value='polygon')
+        self.show_proposals=tk.BooleanVar(master=self.root, value=True)
+        self.verified=tk.BooleanVar(master=self.root, value=False)
         self.root.title('ComicTranslate IT — Annotazioni ground truth')
         self.root.geometry('1320x900')
-        self._build()
-        self._open_page()
+        try:
+            self._build()
+            self._open_page()
+        except Exception:
+            self.root.destroy()
+            raise
 
     def _build(self):
         top=ttk.Frame(self.root,padding=7);top.pack(fill='x')
         ttk.Button(top,text='◀',command=lambda:self._move(-1)).pack(side='left')
-        self.current=tk.StringVar(value='')
+        self.current=tk.StringVar(master=self.root, value='')
         ttk.Label(top,textvariable=self.current,width=42,anchor='center').pack(side='left')
         ttk.Button(top,text='▶',command=lambda:self._move(1)).pack(side='left')
         ttk.Label(top,text='Vai alla pagina:').pack(side='left',padx=(12,3))
-        self.goto=tk.StringVar(value=str(self.page_index+1))
+        self.goto=tk.StringVar(master=self.root, value=str(self.page_index+1))
         ttk.Entry(top,textvariable=self.goto,width=6).pack(side='left')
         ttk.Button(top,text='Vai',command=self._jump).pack(side='left')
         ttk.Button(top,text='Salva (Ctrl+S)',command=self._save).pack(side='right')
@@ -89,7 +93,7 @@ class AnnotationEditor:
         ttk.Checkbutton(right,text='Pagina interamente controllata (completa)',
                         variable=self.verified,command=self._mark_verified).pack(anchor='w',pady=(13,4))
         ttk.Label(right,text='Le linee tratteggiate sono SOLO suggerimenti: azzurro=balloon/testo, arancio=testo esterno. Il modello ONNX fornisce rettangoli approssimativi, NON contorni precisi. Annota ogni balloon manualmente prima di confermare la pagina.',wraplength=310,justify='left').pack(anchor='w',pady=(22,0))
-        self.status=tk.StringVar(value='')
+        self.status=tk.StringVar(master=self.root, value='')
         ttk.Label(self.root,textvariable=self.status,padding=7,anchor='w').pack(fill='x')
         self.root.bind('<Control-s>',lambda e:self._save())
         self.root.bind('<Return>',lambda e:self._finish_polygon())
@@ -133,7 +137,7 @@ class AnnotationEditor:
         w=max(1,round(self.image.width*self.scale));h=max(1,round(self.image.height*self.scale))
         self.off=((cw-w)//2,(ch-h)//2)
         thumb=self.image.resize((w,h))
-        self.photo=ImageTk.PhotoImage(thumb)
+        self.photo=ImageTk.PhotoImage(thumb, master=self.canvas)
         canvas=self.canvas
         canvas.delete('all')
         canvas.create_image(*self.off,image=self.photo,anchor='nw')

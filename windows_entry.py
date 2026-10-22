@@ -41,6 +41,30 @@ def frozen_startup_test(marker: str) -> int:
             )
             if not storage_button_visible:
                 raise RuntimeError("Storage folder picker is missing or hidden in the main window")
+            # Regression: two live Tk roots used to throw "pyimage1 doesn't exist".
+            import io
+            import tempfile
+            import zipfile
+            from PIL import Image
+            with tempfile.TemporaryDirectory(prefix="comictranslator-ui-") as directory:
+                archive = Path(directory) / "page.cbz"
+                image_buffer = io.BytesIO()
+                Image.new("RGB", (180, 120), "white").save(image_buffer, "PNG")
+                with zipfile.ZipFile(archive, "w") as z:
+                    z.writestr("p1.png", image_buffer.getvalue())
+                editor = AnnotationEditor(str(archive), str(Path(directory) / "annotations.json"))
+                try:
+                    editor.root.update_idletasks()
+                    editor._redraw()
+                    editor_photo_valid = (
+                        editor.root.tk.call("image", "type", str(editor.photo)) == "photo"
+                        and editor.photo.tk is editor.canvas.tk
+                        and editor.photo.tk is not ui.root.tk
+                    )
+                    if not editor_photo_valid:
+                        raise RuntimeError("Editor bitmap was created in the wrong Tk window")
+                finally:
+                    editor.root.destroy()
         finally:
             ui.root.destroy()
         payload = {
@@ -48,6 +72,7 @@ def frozen_startup_test(marker: str) -> int:
             "frozen": packaged,
             "bundled_7zip": valid_7zip,
             "storage_picker_visible": storage_button_visible,
+            "editor_photo_valid": editor_photo_valid,
             "model": MODEL_FILENAME,
             "onnxruntime": onnxruntime.__version__
         }
