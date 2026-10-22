@@ -10,7 +10,7 @@ from tkinter import ttk,messagebox
 from PIL import ImageTk
 from .archives import Archive
 from .annotations import (KINDS,load_annotations,save_annotations,normalize_polygon,
-                          denormalize_polygon,validate_shape,proposal_regions)
+                          denormalize_polygon,validate_shape,proposal_regions,copy_proposals_as_draft)
 
 
 COLORS={'dialogue':'#00e5ff','caption':'#ffe14a','thought':'#c084fc',
@@ -41,6 +41,7 @@ class AnnotationEditor:
         self.kind=tk.StringVar(master=self.root, value='dialogue')
         self.draw_mode=tk.StringVar(master=self.root, value='polygon')
         self.show_proposals=tk.BooleanVar(master=self.root, value=True)
+        self.show_labels=tk.BooleanVar(master=self.root, value=False)
         self.verified=tk.BooleanVar(master=self.root, value=False)
         self.root.title('ComicTranslate IT — Annotazioni ground truth')
         self.root.geometry('1320x900')
@@ -71,6 +72,8 @@ class AnnotationEditor:
                             command=self._discard_pending).pack(side='left',padx=4)
         ttk.Checkbutton(tools,text='Mostra proposte automatiche',variable=self.show_proposals,
                         command=self._redraw).pack(side='left',padx=14)
+        ttk.Checkbutton(tools,text='Etichette tecniche',variable=self.show_labels,
+                        command=self._redraw).pack(side='left',padx=8)
         self.canvas=tk.Canvas(left,bg='#202020',highlightthickness=0)
         self.canvas.pack(fill='both',expand=True)
         self.canvas.bind('<Button-1>',self._down)
@@ -83,7 +86,9 @@ class AnnotationEditor:
         for kind,title in [('dialogue','Dialogo'),('caption','Didascalia'),('thought','Pensiero'),
                            ('sfx','Onomatopea'),('art_text','Testo nel disegno')]:
             ttk.Radiobutton(right,text=title,variable=self.kind,value=kind).pack(anchor='w')
-        ttk.Label(right,text='Regioni verificate',font=('Segoe UI',11,'bold')).pack(anchor='w',pady=(16,2))
+        ttk.Button(right,text='Usa suggerimenti come BOZZA',
+                   command=self._copy_proposals).pack(fill='x',pady=(10,0))
+        ttk.Label(right,text='Regioni da verificare',font=('Segoe UI',11,'bold')).pack(anchor='w',pady=(16,2))
         self.list=tk.Listbox(right,height=16,exportselection=False)
         self.list.pack(fill='x')
         self.list.bind('<<ListboxSelect>>',self._selected)
@@ -100,6 +105,13 @@ class AnnotationEditor:
         self.root.bind('<BackSpace>',lambda e:self._undo())
         self.root.protocol('WM_DELETE_WINDOW',self._close)
 
+    def _copy_proposals(self):
+        added=copy_proposals_as_draft(self._page(),self.suggestions)
+        self.verified.set(False)
+        self._refresh();self._redraw()
+        self.status.set(f'{added} regioni copiate come BOZZA. '
+                        'Correggi solo gli errori e salva.')
+
     def _page(self):
         key=str(self.page_index+1)
         if key not in self.data['pages']:
@@ -113,6 +125,9 @@ class AnnotationEditor:
     def _open_page(self):
         with Archive(self.archive_path) as archive:
             self.image=archive.image(self.names[self.page_index])
+        if self.detector_backend=='onnx':
+            self.status.set('Analisi dettagliata a più scale e contorni stimati...')
+            self.root.update_idletasks()
         self.suggestions=proposal_regions(self.image,self.detector_backend,self.model,self.threshold)
         self._page()
         self.verified.set(self._page().get('verified',False))
@@ -128,7 +143,11 @@ class AnnotationEditor:
         if self.region_index is not None and self.region_index<self.list.size():
             self.list.selection_set(self.region_index)
         status = 'REVISIONATA' if self._page().get('verified') else 'BOZZA'
-        self.status.set(f'{len(self._page()["regions"])} regioni umane · {len(self.suggestions)} proposte · {status}')
+        contours=sum(r.get('geometry')=='light_surface_candidate' for r in self.suggestions)
+        boxes=sum(r.get('geometry')=='bounding_box_only' for r in self.suggestions)
+        self.status.set(f'{len(self._page()["regions"])} regioni da verificare · '
+                        f'{len(self.suggestions)} proposte ({contours} contorni stimati, '
+                        f'{boxes} box approssimativi) · {status}')
 
     def _redraw(self):
         if not hasattr(self,'image') or not self.canvas.winfo_exists():return
@@ -144,11 +163,14 @@ class AnnotationEditor:
         if self.show_proposals.get():
             for r in self.suggestions:
                 coords=self._canvas_coords(r['polygon'])
-                color='#ffad66' if r['kind']=='art_text' else '#76d7ff'
+                geometry=r.get('geometry')
+                color=('#63f5a8' if geometry=='light_surface_candidate'
+                       else '#ffad66' if r['kind']=='art_text' else '#76d7ff')
                 canvas.create_polygon(*coords,outline=color,fill='',dash=(5,4),width=2)
-                if r.get('source')=='ogkalu_rtdetr_v4s_onnx':
-                    canvas.create_text(coords[0]+4,coords[1]+4,anchor='nw',
-                        text=f"{r['role']} {r['confidence']:.2f}",fill=color,
+                if self.show_labels.get() and r.get('source')=='ogkalu_rtdetr_v4s_onnx':
+                    label='CONTORNO?' if geometry=='light_surface_candidate' else 'BOX'
+                    canvas.create_text(coords[0]+4,max(2,coords[1]-13),anchor='nw',
+                        text=f"{label} {r['confidence']:.2f}",fill=color,
                         font=('Arial',8,'bold'))
         for i,r in enumerate(self._page()['regions']):
             coords=self._canvas_coords(r['polygon'])

@@ -73,12 +73,29 @@ def proposal_regions(image: Image.Image, detector: str = 'baseline', model=None,
     if detector == 'onnx':
         if model is None:
             raise ValueError('ONNX detector requires a loaded model')
-        return model.proposals(image,threshold)
+        return model.proposals(image,threshold,detail_pass=min(image.size)>=900)
     if detector != 'baseline':
         raise ValueError(f'Unknown detector backend: {detector}')
     return [{'kind':'dialogue','polygon':normalize_polygon(p,image.width,image.height),
              'source':'bright-contour', 'id':f'd{i:03}'}
             for i,(_,p,_) in enumerate(find_balloons(image),1)]
+
+
+def copy_proposals_as_draft(page:dict,proposals:list[dict]) -> int:
+    """Make editable proposals, without ever marking them human-verified."""
+    existing=page.setdefault('regions',[])
+    added=0
+    for region in proposals:
+        draft={'id':f'gt{len(existing)+1:03}','kind':region['kind'],
+               'polygon':region['polygon'],'source':'automatic_draft',
+               'needs_review':True}
+        validate_shape(draft)
+        if existing and float(np.max(_iou_matrix(existing,[draft],raster=128)))>=.45:
+            continue
+        existing.append(draft)
+        added+=1
+    page['verified']=False
+    return added
 
 
 def _iou_matrix(gt: list[dict], pred: list[dict], raster: int = 512) -> np.ndarray:
