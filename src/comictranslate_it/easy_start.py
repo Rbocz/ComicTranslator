@@ -1,0 +1,168 @@
+"""A single guided Windows entrypoint for the first real detector trial.
+
+No API key, CLI commands or Tesseract needed to review speech balloons.
+Weights are downloaded ONLY after user confirmation, verified by SHA-256.
+"""
+from __future__ import annotations
+
+import os
+from pathlib import Path
+import sys
+import threading
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
+
+from .learned_detection import MODEL_FILENAME, verify_model_file, fetch_model
+
+
+def user_data_directory() -> Path:
+    """Keep model and annotations outside a downloaded/source checkout."""
+    if os.name == "nt" and os.environ.get("LOCALAPPDATA"):
+        root = Path(os.environ["LOCALAPPDATA"])
+    else:
+        root = Path.home() / ".local" / "share"
+    return root / "ComicTranslator"
+
+
+def annotation_path(archive: str | Path, root: Path | None = None) -> Path:
+    source = Path(archive)
+    # Same basename in two directories must not overwrite annotation files.
+    import hashlib
+    digest = hashlib.sha256(str(source.resolve()).encode("utf-8")).hexdigest()[:10]
+    return (root or user_data_directory()) / "annotations" / f"{source.stem[:60]}-{digest}.json"
+
+
+def model_path(root: Path | None = None) -> Path:
+    return (root or user_data_directory()) / "models" / MODEL_FILENAME
+
+
+def validate_selection(archive: str, page: str) -> tuple[Path, int]:
+    source = Path(archive).expanduser()
+    if not source.is_file() or source.suffix.lower() not in {".cbr", ".cbz"}:
+        raise ValueError("Scegli un fumetto .cbr o .cbz esistente")
+    try:
+        page_number = int(page)
+    except ValueError as exc:
+        raise ValueError("Il numero di pagina deve essere un intero") from exc
+    if page_number < 1 or page_number > 1000:
+        raise ValueError("Il numero di pagina deve essere compreso tra 1 e 1000")
+    return source.resolve(), page_number
+
+
+class StartWindow:
+    def __init__(self, root: tk.Tk | None = None):
+        self.root = root or tk.Tk()
+        self.root.title("ComicTranslator — Avvio facile")
+        self.root.geometry("640x360")
+        self.root.resizable(False, False)
+        self.source = tk.StringVar(value="")
+        self.page = tk.StringVar(value="5")
+        self.status = tk.StringVar(value="Scegli il fumetto inglese che vuoi analizzare.")
+        self._working = False
+        self._construct()
+
+    def _construct(self):
+        panel = ttk.Frame(self.root, padding=22)
+        panel.pack(fill="both", expand=True)
+        ttk.Label(panel, text="ComicTranslator", font=("Segoe UI", 22, "bold")).pack(anchor="w")
+        ttk.Label(panel, text="Riconosci i balloon e correggili, senza modificare le tavole originali.").pack(anchor="w", pady=(2, 22))
+        ttk.Label(panel, text="1. Seleziona un fumetto .CBR o .CBZ").pack(anchor="w")
+        file_row = ttk.Frame(panel)
+        file_row.pack(fill="x", pady=(5, 13))
+        ttk.Entry(file_row, textvariable=self.source).pack(side="left", fill="x", expand=True)
+        ttk.Button(file_row, text="Sfoglia...", command=self._browse).pack(side="left", padx=(8, 0))
+        row = ttk.Frame(panel)
+        row.pack(fill="x")
+        ttk.Label(row, text="2. Pagina da analizzare:").pack(side="left")
+        ttk.Entry(row, width=6, textvariable=self.page).pack(side="left", padx=(10, 0))
+        ttk.Label(row, text="(per Absolute Batman inizia da 5)").pack(side="left", padx=(12, 0))
+        self.launch_button = ttk.Button(panel, text="3. ANALIZZA I BALLOON", command=self._start)
+        self.launch_button.pack(fill="x", ipady=10, pady=(25, 8))
+        ttk.Label(panel, textvariable=self.status, wraplength=580, foreground="#455a64").pack(anchor="w")
+        ttk.Label(panel, text="Primo uso: verrà richiesta la conferma per scaricare il modello ONNX. Le pagine non sono inviate online.",
+                  wraplength=580, foreground="#555555").pack(anchor="w", pady=(13, 0))
+
+    def _browse(self):
+        path = filedialog.askopenfilename(parent=self.root, title="Apri il fumetto inglese",
+                                          filetypes=[("Fumetti", "*.cbr *.cbz"), ("Tutti i file", "*.*")])
+        if path:
+            self.source.set(path)
+
+    def _start(self):
+        if self._working:
+            return
+        try:
+            source, page = validate_selection(self.source.get(), self.page.get())
+            # Fast metadata check before prompting for any network activity.
+            from .archives import Archive
+            with Archive(source) as archive:
+                if page > len(archive.names):
+                    raise ValueError(f"Questo fumetto contiene {len(archive.names)} pagine, non {page}.")
+        except Exception as exc:
+            messagebox.showerror("Non posso aprire il fumetto", str(exc), parent=self.root)
+            return
+
+        path = model_path()
+        if verify_model_file(path):
+            self._open_editor(source, page, path)
+            return
+        agree = messagebox.askyesno(
+            "Modello di riconoscimento",
+            "Per individuare i balloon devo scaricare una sola volta il modello ONNX "
+            "dalla sua fonte originale, controllandone l'integrità. Procedo?\n\n"
+            "Le tavole del fumetto restano sul tuo computer.", parent=self.root)
+        if not agree:
+            self.status.set("Download annullato. Riprova quando vuoi.")
+            return
+        self._working = True
+        self.launch_button.state(["disabled"])
+        self.status.set("Sto scaricando e verificando il modello. Connessione Internet necessaria solo ora...")
+        threading.Thread(target=self._fetch_in_worker, args=(source, page, path), daemon=True).start()
+
+    def _fetch_in_worker(self, source: Path, page: int, path: Path):
+        try:
+            fetch_model(path)
+            self.root.after(0, lambda: self._download_finished(source, page, path, None))
+        except Exception as exc:
+            msg = str(exc)
+            self.root.after(0, lambda: self._download_finished(source, page, path, msg))
+
+    def _download_finished(self, source: Path, page: int, path: Path, error: str | None):
+        self._working = False
+        self.launch_button.state(["!disabled"])
+        if error:
+            self.status.set("Impossibile scaricare il modello. Puoi riprovare.")
+            messagebox.showerror("Download non riuscito", error, parent=self.root)
+            return
+        self.status.set("Modello pronto. Apro l'annotatore...")
+        self._open_editor(source, page, path)
+
+    def _open_editor(self, source: Path, page: int, path: Path):
+        if not verify_model_file(path):
+            messagebox.showerror("Modello non valido", "File ONNX mancante o non verificato", parent=self.root)
+            return
+        try:
+            from .annotation_editor import AnnotationEditor
+            # Explicit constructor allows a friendly error before changing windows.
+            editor = AnnotationEditor(str(source), str(annotation_path(source)), page,
+                                      "onnx", str(path))
+        except Exception as exc:
+            messagebox.showerror("Impossibile aprire l'annotatore", str(exc), parent=self.root)
+            return
+        self.root.withdraw()
+        # AnnotationEditor manages its own Tk root and mainloop.
+        try:
+            editor.run()
+        finally:
+            self.root.destroy()
+
+    def run(self):
+        self.root.mainloop()
+
+
+def main():
+    StartWindow().run()
+
+
+if __name__ == "__main__":
+    main()
