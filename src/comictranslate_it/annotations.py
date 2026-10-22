@@ -67,8 +67,15 @@ def save_annotations(data: dict, path: str | Path):
     os.replace(tmp,file)
 
 
-def proposal_regions(image: Image.Image) -> list[dict]:
-    """Conservative baseline detector, no OCR or approval needed."""
+def proposal_regions(image: Image.Image, detector: str = 'baseline', model=None,
+                     threshold: float = .3) -> list[dict]:
+    """All backends return review-only shapes; learned ONNX requires an explicit model."""
+    if detector == 'onnx':
+        if model is None:
+            raise ValueError('ONNX detector requires a loaded model')
+        return model.proposals(image,threshold)
+    if detector != 'baseline':
+        raise ValueError(f'Unknown detector backend: {detector}')
     return [{'kind':'dialogue','polygon':normalize_polygon(p,image.width,image.height),
              'source':'bright-contour', 'id':f'd{i:03}'}
             for i,(_,p,_) in enumerate(find_balloons(image),1)]
@@ -157,7 +164,8 @@ def measure_regions(gt: list[dict],pred: list[dict],threshold:float=.5):
             'false_prediction_indices':[j for j in range(len(pred)) if j not in claimed]}
 
 
-def benchmark_archive(archive_path: str,annotations: dict,only_pages: list[int]|None=None):
+def benchmark_archive(archive_path: str,annotations: dict,only_pages: list[int]|None=None,
+                      detector: str = 'baseline', model=None, threshold: float = .3):
     from .archives import Archive
     output=[]
     with Archive(archive_path) as archive:
@@ -171,7 +179,7 @@ def benchmark_archive(archive_path: str,annotations: dict,only_pages: list[int]|
                 continue  # Draft geometries must never contaminate measured recall
             im=archive.image(archive.names[number-1])
             gt=page['regions']
-            predictions=proposal_regions(im)
+            predictions=proposal_regions(im,detector,model,threshold)
             report=measure_regions(gt,predictions)
             output.append({'page':number,'entry':archive.names[number-1],**report})
     if not output:raise ValueError('No manually verified pages selected')
@@ -180,5 +188,5 @@ def benchmark_archive(archive_path: str,annotations: dict,only_pages: list[int]|
             'precision':round(TP/(TP+FP),4) if TP+FP else None,
             'recall':round(TP/(TP+FN),4) if TP+FN else None,
             'f1':round(2*TP/(2*TP+FP+FN),4) if (2*TP+FP+FN) else None},
-            'status':'Measured against human annotation; samples are not automatically validated.',
+            'detector':detector,'status':'Measured against human annotation; samples are not automatically validated.',
             'warning':'Baseline only; proposed shapes are not verified translations.'}

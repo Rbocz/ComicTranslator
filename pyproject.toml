@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comictranslate-it"
-version = "0.1.0"
+version = "0.5.0a1"
 description = "Conservative comic lettering workflow for English-to-Italian CBZ/CBR"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,6 +15,7 @@ dependencies = ["Pillow>=10.0,<13", "numpy>=1.24,<3", "opencv-python-headless>=4
 [project.optional-dependencies]
 cbr = ["rarfile>=4.1,<5"]
 cloud = ["requests>=2.31,<3"]
+detector = ["onnxruntime>=1.18,<2"]
 dev = ["pytest>=8,<10"]
 
 [project.scripts]

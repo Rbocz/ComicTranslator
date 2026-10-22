@@ -17,6 +17,7 @@ dist/
 !examples/demo_en.cbz
 !examples/demo.project.json
 
-# Reference scans and their local visual benchmarks: private by default.
-private_references/
-reference_reports/
+# Downloaded model weights should never be committed.
+*.onnx
+*.pt
+*.safetensors
