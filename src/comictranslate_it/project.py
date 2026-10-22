@@ -1,6 +1,8 @@
 """Project persistence, with atomic JSON replacement and original archive unchanged."""
 import json
 import os
+import io
+from PIL import Image
 from pathlib import Path
 from dataclasses import dataclass, field
 from .models import Page
@@ -21,10 +23,16 @@ class Project:
     @classmethod
     def create(cls, source: str, project_path: str):
         with Archive(source) as archive:
-            pages = []
-            for name in archive.names:
-                image = archive.image(name)
-                pages.append(Page(name, image.width, image.height))
+            dimensions={}
+            for name,raw in archive.iter_raw():
+                with Image.open(io.BytesIO(raw)) as image:
+                    width,height=image.size
+                    if image.getexif().get(274,1) in (5,6,7,8):
+                        width,height=height,width
+                    if width*height>60_000_000:
+                        raise ValueError(f"Pagina con troppi pixel: {name}")
+                    dimensions[name]=(width,height)
+            pages=[Page(name,*dimensions[name]) for name in archive.names]
         result = cls(source=str(Path(source).resolve()), pages=pages)
         result.save(project_path)
         return result

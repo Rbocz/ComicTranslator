@@ -5,6 +5,8 @@ from pathlib import Path
 from .project import Project
 from .pipeline import scan, translate, export
 from .reference_benchmark import evaluate, write_profile
+from .reference_matching import match_references, save_matches
+from .reference_dataset import prepare_dataset
 
 
 def main(argv=None):
@@ -30,6 +32,11 @@ def main(argv=None):
     rp.add_argument("reports",nargs="+");rp.add_argument("--out",required=True)
     ap=sub.add_parser("apply-profile",help="Associa un profilo misurato al progetto")
     ap.add_argument("project");ap.add_argument("profile")
+    rm=sub.add_parser("reference-match",help="Abbina scansioni italiane alle pagine CBR/CBZ")
+    rm.add_argument("archive");rm.add_argument("italian",nargs="+");rm.add_argument("--out",required=True)
+    ds=sub.add_parser("reference-dataset",help="Abbina, misura e calibra riferimenti EN/IT")
+    ds.add_argument("archive");ds.add_argument("italian",nargs="+")
+    ds.add_argument("--out",required=True);ds.add_argument("--overlays",action="store_true")
     args=parser.parse_args(argv)
     try:
         if args.action=="init":
@@ -45,6 +52,14 @@ def main(argv=None):
             blocked=sum(not r["applied"] for p in log for r in p["regions"])
             print(f"Scritto {args.output}. Balloon applicati: {success}; non applicati: {blocked}")
             print(f"Controlli: {Path(args.output).with_suffix('.report.json')}")
+        elif args.action=="reference-match":
+            report=match_references(args.archive,args.italian)
+            save_matches(report,args.out)
+            count=sum(x["confidence"]=="high" for x in report["matches"])
+            print(f"Abbinati {count}/{len(report['matches'])} riferimenti. Report: {args.out}")
+        elif args.action=="reference-dataset":
+            report=prepare_dataset(args.archive,args.italian,args.out,args.overlays)
+            print(f"Pagine distinte: {report['distinct_matched_pages']}; candidate balloon: {report['balloon_candidates']}; dettagli: {args.out}")
         elif args.action=="reference-eval":
             result=evaluate(args.english,args.italian,args.part,args.overlay)
             Path(args.out).parent.mkdir(parents=True,exist_ok=True)

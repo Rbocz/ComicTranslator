@@ -31,6 +31,21 @@ Rilevamento e OCR non sono completi su balloon colorati e lettering elaborato. P
 
 Vedi [la guida completa](docs/REFERENCE_BENCHMARK.md). Sono necessarie poche righe leggibili con Tesseract `ita`: non è addestramento di una rete neurale. **Le scansioni originali non sono incluse nel repository.**
 
+## Abbinamento automatico CBR + riferimenti italiani (v0.3 sperimentale)
+
+`comictranslate reference-match "albo.cbr" "pagina-it.png" --out private_references/matches.json`
+identifica le pagine del capitolo inglese tramite caratteristiche grafiche SIFT+RANSAC.
+`comictranslate reference-dataset "albo.cbr" "pagina1-it.png" "pagina2-it.png" --out private_references/report`
+genera gli abbinamenti e i report offline, eliminando le duplicazioni delle pagine
+anche se hai fornito crop parziali dello stesso fumetto. Aggiungi `--overlays`
+soltanto quando desideri le anteprime private con le regioni rilevate.
+
+Per il flusso completo, consulta [la guida](docs/CBR_REFERENCE_WORKFLOW.md).
+I profili risultanti sono **provvisori**: non applicarli come verità editoriali
+finché il riconoscimento dei balloon non avrà una copertura adeguata.
+Su Windows è richiesto 7-Zip/UnRAR per CBR; su Linux/macOS è disponibile
+l'accesso opzionale tramite `libarchive` di sistema.
+
 ## Roadmap
 1. Benchmark controllato sui comics occidentali.
 2. Detector specifico e OCR robusto.

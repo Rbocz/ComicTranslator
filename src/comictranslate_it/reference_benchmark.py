@@ -117,7 +117,20 @@ def _line_metrics(img,mask,rect):
 
 
 def evaluate(english: str,italian: str,part: int=1,overlay: str|None=None):
-    raw=_rgb(english);target=_rgb(italian)
+    return evaluate_arrays(_rgb(english),_rgb(italian),part,overlay)
+
+
+def evaluate_arrays(raw: np.ndarray,target: np.ndarray,part: int=1,overlay: str|None=None):
+    """Read both pages from memory; never extract scans into a public repository."""
+    raw=np.asarray(raw,dtype=np.uint8);target=np.asarray(target,dtype=np.uint8)
+    if raw.ndim!=3 or target.ndim!=3 or raw.shape[2]!=3 or target.shape[2]!=3:
+        raise ReferenceError("Expected RGB images")
+    if raw.shape[0]*raw.shape[1]>60_000_000:
+        raise ReferenceError("Page is too large")
+    if max(raw.shape[:2])>1900:
+        ratio=1900/max(raw.shape[:2])
+        raw=cv2.resize(raw,(round(raw.shape[1]*ratio),round(raw.shape[0]*ratio)),
+                       interpolation=cv2.INTER_AREA)
     source_ratio=raw.shape[1]/raw.shape[0]
     target_ratio=target.shape[1]/target.shape[0]
     # A full-width panel gutter should not split a *single* complete page.
@@ -162,14 +175,16 @@ def evaluate(english: str,italian: str,part: int=1,overlay: str|None=None):
 
 def write_profile(reports:list[dict],output:str):
     fills=[r["mean_line_fill"] for report in reports for r in report["balloons"]
-           if r["mean_line_fill"] is not None and r["ocr_word_count"]>=2]
+           if r["mean_line_fill"] is not None and r["ocr_word_count"]>=2
+           and (r.get("line_count") is None or 1<=r["line_count"]<=7)]
     if len(fills)<3:
         raise ReferenceError("Not enough measured Italian dialogue lines for calibration")
     target=round(float(np.clip(np.median(fills),.50,.86)),3)
     profile={"schema":1,"sample_balloon_count":len(fills),
              "target_line_fill":target,
              "method":"median OCR line width / available balloon span",
-             "warning":"Experimental style preference, not model training."}
+             "review_status":"provisional",
+             "warning":"Small automatically detected OCR sample: some multi-balloon groups may remain. Not model training."}
     path=Path(output);path.parent.mkdir(parents=True,exist_ok=True)
     path.write_text(json.dumps(profile,ensure_ascii=False,indent=2),encoding="utf-8")
     return profile
