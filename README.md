@@ -54,3 +54,15 @@ l'accesso opzionale tramite `libarchive` di sistema.
 5. Eseguibile Windows e test visivi.
 
 Questo progetto è autonomo, non incorpora codice di terzi senza verifica della licenza.
+
+
+## v0.4 — Annotazioni verificate e benchmark del detector
+
+Puoi ora disegnare poligoni e rettangoli per **ogni** balloon, didascalia, pensiero, onomatopea o testo incorporato nell'illustrazione. Il sistema distingue le proposte automatiche (non affidabili) dalle pagine **verificate completamente** dall'operatore e non conteggia mai le bozze come ground truth.
+
+```powershell
+comictranslate annotate "capitolo.cbr" --page 5 --out "private_references/annotations.json"
+comictranslate detector-eval "capitolo.cbr" "private_references/annotations.json" --out "private_references/detection-report.json"
+```
+
+Misure: IoU, precisione, recall, F1, recall per categoria, falsi positivi, false negativi e regioni fuse. Vedi [guida al sistema di annotazione](docs/ANNOTATION_WORKFLOW.md). Le pagine del fumetto rimangono private.
