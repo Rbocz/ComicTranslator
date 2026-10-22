@@ -82,7 +82,7 @@ def refine_light_surface(image: Image.Image, box: tuple[int, int, int, int],
     perimeter=cv2.arcLength(contour,True)
     approximate=cv2.approxPolyDP(contour,max(1.5,perimeter*.006),
                                   True).reshape(-1,2)
-    if not 3<=len(approx)<=96:
+    if not 3<=len(approximate)<=96:
         return None
     polygon=[[int(x)+lx,int(y)+top] for x,y in approximate]
     return polygon,round(float(covered),3)
