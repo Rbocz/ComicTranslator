@@ -97,3 +97,28 @@ def test_model_migration_failure_keeps_source(tmp_path, monkeypatch):
         mod.move_verified_model(first, second)
     assert first.read_bytes() == b'old'
     assert second.read_bytes() == b'corrupt'
+
+
+def test_visible_storage_picker_is_present_and_before_analyze():
+    """Regression: UI had a chooser method but never displayed its button."""
+    import os
+    import tkinter as tk
+    if os.name != 'nt' and not os.environ.get('DISPLAY'):
+        pytest.skip('Tkinter display unavailable')
+    from comictranslate_it.easy_start import StartWindow
+    try:
+        app = StartWindow()
+    except tk.TclError:
+        pytest.skip('Tkinter display unavailable')
+    try:
+        app.root.update_idletasks()
+        assert app.storage_picker.winfo_manager() == 'pack'
+        assert app.storage_entry.winfo_manager() == 'pack'
+        assert app.storage_picker.cget('command')
+        storage_row = app.storage_picker.master
+        panel = app.launch_button.master
+        assert storage_row.winfo_manager() == 'pack'
+        assert storage_row in panel.pack_slaves()
+        assert panel.pack_slaves().index(storage_row) < panel.pack_slaves().index(app.launch_button)
+    finally:
+        app.root.destroy()

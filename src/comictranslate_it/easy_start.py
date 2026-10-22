@@ -132,8 +132,9 @@ class StartWindow:
     def __init__(self, root: tk.Tk | None = None):
         self.root = root or tk.Tk()
         self.root.title("ComicTranslator — Avvio facile")
-        self.root.geometry("700x465")
-        self.root.resizable(False, False)
+        self.root.geometry("760x520")
+        self.root.minsize(620, 420)
+        self.root.resizable(True, True)
         self.source = tk.StringVar(value="")
         self.page = tk.StringVar(value="5")
         self.storage = tk.StringVar(value=str(load_storage_directory()))
@@ -156,8 +157,19 @@ class StartWindow:
         ttk.Label(row, text="2. Pagina da analizzare:").pack(side="left")
         ttk.Entry(row, width=6, textvariable=self.page).pack(side="left", padx=(10, 0))
         ttk.Label(row, text="(per Absolute Batman inizia da 5)").pack(side="left", padx=(12, 0))
-        self.launch_button = ttk.Button(panel, text="3. ANALIZZA I BALLOON", command=self._start)
-        self.launch_button.pack(fill="x", ipady=10, pady=(18, 8))
+        # Always show the storage selector BEFORE the download button.  The
+        # previous build had a working _choose_storage() method but no UI
+        # control calling it: models were silently directed to C:.
+        ttk.Label(panel, text="3. Cartella per modello e annotazioni (puoi scegliere il disco F:)").pack(
+            anchor="w", pady=(14, 0))
+        storage_row = ttk.Frame(panel)
+        storage_row.pack(fill="x", pady=(5, 7))
+        self.storage_entry = ttk.Entry(storage_row, textvariable=self.storage)
+        self.storage_entry.pack(side="left", fill="x", expand=True)
+        self.storage_picker = ttk.Button(storage_row, text="Scegli cartella...", command=self._choose_storage)
+        self.storage_picker.pack(side="left", padx=(8, 0))
+        self.launch_button = ttk.Button(panel, text="4. ANALIZZA I BALLOON", command=self._start)
+        self.launch_button.pack(fill="x", ipady=9, pady=(13, 8))
         ttk.Label(panel, textvariable=self.status, wraplength=580, foreground="#455a64").pack(anchor="w")
         ttk.Label(panel, text="Primo uso: verrà richiesta la conferma per scaricare il modello ONNX. Le pagine non sono inviate online.",
                   wraplength=580, foreground="#555555").pack(anchor="w", pady=(13, 0))
@@ -169,13 +181,20 @@ class StartWindow:
             self.source.set(path)
 
     def _choose_storage(self):
-        initial = Path(self.storage.get())
+        # If the comic is on F:, start on that disk to avoid navigating out
+        # of the default Windows AppData C: folder manually.
+        comic = Path(self.source.get())
+        initial = comic.parent if comic.is_file() else Path(self.storage.get())
         base = initial if initial.is_dir() else (initial.parent if initial.parent.is_dir() else Path.home())
         directory = filedialog.askdirectory(parent=self.root,
-                     title="Scegli una cartella sul secondo disco per il modello ONNX",
+                     title="Scegli la cartella del modello sul secondo disco",
                      initialdir=str(base), mustexist=True)
         if directory:
-            self.storage.set(directory)
+            selected = Path(directory)
+            # Choosing the root of a drive puts the app data in its own folder.
+            if selected == Path(selected.anchor):
+                selected = selected / "ComicTranslator-Dati"
+            self.storage.set(str(selected))
 
     def _start(self):
         if self._working:

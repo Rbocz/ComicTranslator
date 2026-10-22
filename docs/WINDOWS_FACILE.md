@@ -34,3 +34,15 @@ Solo un piccolo file settings.json resta in %LOCALAPPDATA%\ComicTranslator
 per ricordare la cartella scelta. Modello e annotazioni vengono salvati
 nel disco selezionato. La cartella del programma puo' essere anch'essa
 spostata sul secondo disco semplicemente trascinandola in Esplora file.
+
+
+Correzione v0.6.3 (interfaccia): la versione v0.6.2 includeva la funzione
+per scegliere il disco, ma il pulsante non compariva nella finestra.
+Da v0.6.3 e' VISIBILE il campo "3. Cartella per modello e annotazioni"
+con il pulsante "Scegli cartella...", prima del tasto "4. ANALIZZA I BALLOON".
+Seleziona F:\ComicTranslator-Dati sul tuo secondo disco (oppure scegli
+la radice F:\: il programma propone una cartella dedicata).
+Se il fumetto e' gia' su F:, la scelta cartella si apre direttamente
+nella zona del fumetto, per facilitare la selezione dello stesso disco.
+Il test Windows del file .exe verifica ora che il pulsante di selezione
+cartella sia stato creato e sia effettivamente mostrato.
