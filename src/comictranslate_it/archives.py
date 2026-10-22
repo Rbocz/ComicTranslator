@@ -57,6 +57,7 @@ class Archive:
                 except ImportError as exc:
                     raise RuntimeError("CBR necessita libarchive o rarfile con 7-Zip/UnRAR") from exc
                 try:
+                    _configure_rar_backend(rarfile)
                     self.reader = rarfile.RarFile(self.path)
                     infos = [i for i in self.reader.infolist()
                              if not i.isdir() and safe_entry(i.filename) and Path(i.filename).suffix.lower() in IMAGE_EXT]
