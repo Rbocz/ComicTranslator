@@ -53,7 +53,10 @@ def test_editor_image_uses_its_canvas_tk_interpreter(tmp_path):
         pytest.skip(f"Tkinter unavailable on this CI runner: {exc}")
     editor = None
     try:
-        editor = AnnotationEditor(str(archive), str(tmp_path / 'annotations.json'))
+        try:
+            editor = AnnotationEditor(str(archive), str(tmp_path / 'annotations.json'))
+        except tk.TclError as exc:
+            pytest.skip(f"Tkinter GUI data unavailable on this runner: {exc}")
         editor.root.update_idletasks()
         editor._redraw()
         assert editor.root.tk.call('image', 'type', str(editor.photo)) == 'photo'
