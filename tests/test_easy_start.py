@@ -1,0 +1,52 @@
+"""UI-independent checks of the one-click startup path."""
+from pathlib import Path
+import pytest
+
+from comictranslate_it.easy_start import (
+    user_data_directory, annotation_path, model_path, validate_selection,
+)
+from comictranslate_it.archives import _configure_rar_backend
+
+
+def test_validate_archive_and_page(tmp_path):
+    comic = tmp_path / "prova.cbr"
+    comic.write_bytes(b"dummy")
+    assert validate_selection(str(comic), "5") == (comic.resolve(), 5)
+    for value in ["0", "1001", "x"]:
+        with pytest.raises(ValueError):
+            validate_selection(str(comic), value)
+    with pytest.raises(ValueError):
+        validate_selection(str(tmp_path / "no.cbr"), "5")
+
+
+def test_safe_private_paths(tmp_path):
+    path1 = tmp_path / "a" / "comic.cbr"
+    path2 = tmp_path / "b" / "comic.cbr"
+    assert annotation_path(path1, tmp_path) != annotation_path(path2, tmp_path)
+    assert annotation_path(path1, tmp_path).parent == tmp_path / "annotations"
+    assert model_path(tmp_path).suffix == ".onnx"
+
+
+def test_private_default_location(monkeypatch, tmp_path):
+    monkeypatch.setattr("comictranslate_it.easy_start.os.name", "posix")
+    monkeypatch.setattr("comictranslate_it.easy_start.Path.home", lambda: tmp_path)
+    assert user_data_directory() == tmp_path / ".local" / "share" / "ComicTranslator"
+
+
+def test_bundled_7zip_discovery(monkeypatch, tmp_path):
+    # Ensures 7-Zip can be configured without requiring PATH editing.
+    class FakeRarfile:
+        SEVENZIP_TOOL = "7z"
+        invoked = False
+        def tool_setup(self, force=False):
+            self.invoked = force
+    fake = FakeRarfile()
+    bundled = tmp_path / "tools" / "7z.exe"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_bytes(b"dummy")
+    import sys
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    monkeypatch.setattr(sys, "executable", str(tmp_path / "ComicTranslator.exe"))
+    _configure_rar_backend(fake)
+    assert fake.SEVENZIP_TOOL == str(bundled)
+    assert fake.invoked

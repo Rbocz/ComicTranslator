@@ -2,6 +2,22 @@
 
 **Scopo:** sostituire testo inglese con lettering italiano in fumetti CBR/CBZ **senza riscrivere pixels fuori dall'area esplicitamente consentita**. È un prototipo funzionante e revisionabile, **non** un traduttore professionale interamente automatico.
 
+## Avvio facile su Windows (consigliato)
+
+**Non è necessario installare Python, usare PowerShell o installare 7-Zip.**
+
+1. Apri [Windows portable in GitHub Actions](https://github.com/Rbocz/ComicTranslator/actions/workflows/windows-portable.yml).
+2. Apri l'esecuzione più recente con spunta verde e scarica l'artifact **ComicTranslator-Windows-portatile**.
+3. Estrai lo ZIP, poi fai doppio clic su **ComicTranslator.exe**.
+4. Scegli un CBR/CBZ, la pagina, e premi **ANALIZZA I BALLOON**.
+5. Al primo utilizzo dai il consenso al download del modello ONNX (verifica SHA-256).
+
+Il programma mostra le proposte del detector. Le tavole originali non vengono alterate e **non sono inviate in rete**. Annotazioni e modello rimangono nella cartella locale utente. **Non è ancora un traduttore automatico completo.**
+
+Alternativa usando il sorgente: fai doppio clic su **AVVIA_FACILE.bat**; se Python manca, ti chiederà prima il consenso per installarlo con winget.
+
+Consulta anche [la guida breve](docs/WINDOWS_FACILE.md).
+
 ## Cosa fa già
 
 - Importa CBZ e CBR (CBR richiede anche estrattore RAR, per es. 7-Zip/UnRAR), ordinando naturalmente le pagine; controlli dimensionali e lettura senza estrarre contenuto su disco.

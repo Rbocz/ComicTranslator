@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import re
 import zipfile
+import sys
 from pathlib import Path
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -41,16 +42,12 @@ class Archive:
                 raise ValueError(f"Pagina troppo grande: {oversized[0]}")
             names = [i.filename for i in infos]
         elif self.ext == ".cbr":
-            # Native system libarchive on Linux/macOS. Windows falls back to
-            # rarfile with an external 7-Zip/UnRAR extraction backend.
             try:
                 from .libarchive_rar import LibArchiveRAR
                 self.reader=LibArchiveRAR(self.path)
                 infos=self.reader.infolist()
-                names=[i.filename for i in infos if safe_entry(i.filename)
-                       and Path(i.filename).suffix.lower() in IMAGE_EXT and i.file_size>=0]
-                oversized=[i.filename for i in infos if i.filename in names
-                           and i.file_size>MAX_PAGE_BYTES]
+                names=[i.filename for i in infos if safe_entry(i.filename) and Path(i.filename).suffix.lower() in IMAGE_EXT and i.file_size>=0]
+                oversized=[i.filename for i in infos if i.filename in names and i.file_size>MAX_PAGE_BYTES]
                 if oversized:raise ValueError(f"Pagina troppo grande: {oversized[0]}")
                 self._libarchive=True
             except (OSError,RuntimeError,ImportError):
@@ -60,15 +57,15 @@ class Archive:
                 except ImportError as exc:
                     raise RuntimeError("CBR necessita libarchive o rarfile con 7-Zip/UnRAR") from exc
                 try:
-                    self.reader=rarfile.RarFile(self.path)
-                    infos=[i for i in self.reader.infolist() if not i.isdir()
-                           and safe_entry(i.filename)
-                           and Path(i.filename).suffix.lower() in IMAGE_EXT]
-                    oversized=[i.filename for i in infos if i.file_size>MAX_PAGE_BYTES]
-                    if oversized:raise ValueError(f"Pagina troppo grande: {oversized[0]}")
-                    names=[i.filename for i in infos]
+                    self.reader = rarfile.RarFile(self.path)
+                    infos = [i for i in self.reader.infolist()
+                             if not i.isdir() and safe_entry(i.filename) and Path(i.filename).suffix.lower() in IMAGE_EXT]
+                    oversized = [i.filename for i in infos if i.file_size > MAX_PAGE_BYTES]
+                    if oversized:
+                        raise ValueError(f"Pagina troppo grande: {oversized[0]}")
+                    names = [i.filename for i in infos]
                 except Exception as exc:
-                    raise RuntimeError("Non riesco a leggere il CBR: controlla l'estrattore installato") from exc
+                    raise RuntimeError("Non riesco a leggere il CBR: controlla RAR e l'estrattore installato") from exc
         else:
             raise ValueError("Formato non supportato: sono necessari .cbz o .cbr")
         self.names = sorted(names, key=natural_key)
@@ -105,10 +102,33 @@ class Archive:
             raise ValueError(f"Immagine non leggibile: {filename}") from exc
 
     def iter_raw(self):
-        """Yield (filename, raw image bytes); stream CBR in one pass if possible."""
+        """Yield (filename, bytes) in page order, stream RAR in one pass if possible."""
         if getattr(self,"_libarchive",False):
+            # libarchive native iteration follows stored order; restore natural order.
             for name,blob in self.reader.iter_files(set(self.names),MAX_PAGE_BYTES):
                 yield name,blob
         else:
             for name in self.names:
                 yield name,self.raw(name)
+
+
+def _configure_rar_backend(rarfile_module):
+    """Use the 7-Zip binary shipped with our Windows portable build.
+
+    Avoid requiring an installation or a manually edited PATH.  The pure-Python
+    rarfile parser still handles archive metadata and limits decompressed bytes.
+    """
+    candidates = []
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / "tools" / "7z.exe")
+    candidates.extend((
+        Path(__file__).resolve().parents[2] / "tools" / "7z.exe",
+        Path("C:/Program Files/7-Zip/7z.exe"),
+        Path("C:/Program Files (x86)/7-Zip/7z.exe"),
+    ))
+    for candidate in candidates:
+        if candidate.is_file():
+            rarfile_module.SEVENZIP_TOOL = str(candidate)
+            if hasattr(rarfile_module, "tool_setup"):
+                rarfile_module.tool_setup(force=True)
+            break

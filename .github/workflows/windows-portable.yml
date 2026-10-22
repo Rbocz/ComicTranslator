@@ -1,0 +1,65 @@
+name: Windows portable
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "pyproject.toml"
+      - ".github/workflows/windows-portable.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[cbr,detector,dev]" pyinstaller
+      - name: Verify unit tests
+        run: python -m pytest -q
+      - name: Build desktop application
+        run: |
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ComicTranslator --paths src --collect-all onnxruntime src/comictranslate_it/easy_start.py
+      - name: Include 7-Zip for CBR files
+        shell: pwsh
+        run: |
+          $folder = "C:\Program Files\7-Zip"
+          if (-not (Test-Path "$folder\7z.exe")) {
+            choco install 7zip -y --no-progress
+          }
+          if (-not (Test-Path "$folder\7z.exe")) { throw "7-Zip missing on builder" }
+          New-Item -ItemType Directory -Force "dist\ComicTranslator\tools" | Out-Null
+          Copy-Item "$folder\7z.exe" "dist\ComicTranslator\tools\7z.exe"
+          Copy-Item "$folder\7z.dll" "dist\ComicTranslator\tools\7z.dll"
+          if (Test-Path "$folder\License.txt") {
+            Copy-Item "$folder\License.txt" "dist\ComicTranslator\tools\7Zip-LICENSE.txt"
+          }
+          if (Test-Path "$folder\UnRar.txt") {
+            Copy-Item "$folder\UnRar.txt" "dist\ComicTranslator\tools\UnRar-LICENSE.txt"
+          }
+          Copy-Item "docs\WINDOWS_FACILE.md" "dist\ComicTranslator\LEGGIMI.txt"
+      - name: Confirm packaged files
+        shell: pwsh
+        run: |
+          foreach ($file in @("dist\ComicTranslator\ComicTranslator.exe", "dist\ComicTranslator\tools\7z.exe", "dist\ComicTranslator\tools\7z.dll")) {
+            if (-not (Test-Path $file)) { throw "Portable missing required file: $file" }
+          }
+      - name: Publish portable ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ComicTranslator-Windows-portatile
+          path: dist/ComicTranslator/
+          if-no-files-found: error
+          retention-days: 30
