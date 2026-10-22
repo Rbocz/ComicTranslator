@@ -47,7 +47,10 @@ def test_editor_image_uses_its_canvas_tk_interpreter(tmp_path):
     archive = tmp_path / 'two_windows.cbz'
     with zipfile.ZipFile(archive, 'w') as target:
         target.writestr('page1.png', blob.getvalue())
-    launcher_root = tk.Tk()
+    try:
+        launcher_root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter unavailable on this CI runner: {exc}")
     editor = None
     try:
         editor = AnnotationEditor(str(archive), str(tmp_path / 'annotations.json'))
