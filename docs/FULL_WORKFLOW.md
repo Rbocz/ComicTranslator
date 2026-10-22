@@ -27,7 +27,7 @@
 
 ## Opzioni provider
 
-- Gemini: preimpostazione `gemini-2.5-flash`, endpoint ufficiale GenerateContent con inline JPEG e JSON mode.
+- Gemini: preimpostazione `gemini-3.8-flash`, endpoint ufficiale GenerateContent con inline JPEG e JSON mode.
 - OpenAI: preimpostazione `gpt-4.1-mini`, endpoint chat/completions vision e JSON mode.
 - Non condividere mai chiavi API in GitHub, negli screenshot o nelle chat.
 
