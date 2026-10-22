@@ -23,7 +23,7 @@ from .models import Rect, Region
 from .project import Project
 from .pipeline import export
 
-DEFAULT_MODELS={'Google Gemini':'gemini-2.5-flash','OpenAI':'gpt-4.1-mini'}
+DEFAULT_MODELS={'Google Gemini':'gemini-3.8-flash','OpenAI':'gpt-4.1-mini'}
 
 class ServiceError(RuntimeError):
     pass
@@ -94,8 +94,14 @@ def recognize_translate(image:Image.Image,provider:str,api_key:str,model:str,
     client=http_client or _http_json
     if provider=='Google Gemini':
         url=f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent'
+        generation={'responseMimeType':'application/json','maxOutputTokens':8192}
+        if model.startswith('gemini-3') or model.startswith('gemini-4'):
+            # New Gemini models no longer accept custom sampling parameters.
+            generation['thinkingConfig']={'thinkingLevel':'low'}
+        else:
+            generation['temperature']=0.15
         payload={'contents':[{'role':'user','parts':[{'text':prompt},{'inline_data':{'mime_type':'image/jpeg','data':encoded}}]}],
-                 'generationConfig':{'responseMimeType':'application/json','temperature':0.15,'maxOutputTokens':8192}}
+                 'generationConfig':generation}
         response=client(url,payload,{'x-goog-api-key':api_key.strip()})
         try:
             parts=response['candidates'][0]['content']['parts']
