@@ -22,7 +22,15 @@ CBR: usa 7-Zip fornito nel pacchetto. 7-Zip e' un software terzo con licenze
 LGPL/BSD e restrizioni unRAR: https://www.7-zip.org/license.txt.
 Le comunicazioni sul software di terzi sono riportate nella cartella tools/.
 
-Aggiornamento v0.6.1: corretto l'entrypoint dell'app compilata.
-La pipeline Windows esegue ora un vero controllo di avvio del file ComicTranslator.exe
-prima di pubblicare lo ZIP. Se hai scaricato la build precedente all'aggiornamento,
-cancellala e usa la nuova build verificata.
+Scelta disco del modello (v0.6.2): nella schermata iniziale premi
+"Scegli cartella..." accanto a "Dove salvare modello e annotazioni" e scegli
+una cartella sul secondo disco, per esempio D:\ComicTranslator-Dati o
+E:\ComicTranslator-Dati. Il percorso viene mostrato prima della conferma
+del download, e ricordato ai successivi avvii.
+Se un modello valido era gia' stato scaricato nella vecchia cartella
+%LOCALAPPDATA%\ComicTranslator\models, il programma propone di spostarlo
+sul secondo disco senza riscaricarlo, verificandone il checksum.
+Solo un piccolo file settings.json resta in %LOCALAPPDATA%\ComicTranslator
+per ricordare la cartella scelta. Modello e annotazioni vengono salvati
+nel disco selezionato. La cartella del programma puo' essere anch'essa
+spostata sul secondo disco semplicemente trascinandola in Esplora file.

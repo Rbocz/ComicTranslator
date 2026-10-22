@@ -50,3 +50,50 @@ def test_bundled_7zip_discovery(monkeypatch, tmp_path):
     _configure_rar_backend(fake)
     assert fake.SEVENZIP_TOOL == str(bundled)
     assert fake.invoked
+
+
+def test_chosen_storage_directory_persists_and_is_used(tmp_path, monkeypatch):
+    import comictranslate_it.easy_start as mod
+    config = tmp_path / 'config' / 'settings.json'
+    disk_two = tmp_path / 'SECOND_DISK' / 'ComicTranslator'
+    monkeypatch.setattr(mod, 'settings_path', lambda: config)
+    root = mod.validate_storage_directory(disk_two)
+    mod.save_storage_directory(root)
+    assert mod.load_storage_directory() == root
+    assert mod.model_path(root).parent == root / 'models'
+    assert mod.annotation_path(tmp_path / 'issue.cbr', root).parent == root / 'annotations'
+    assert not (tmp_path / 'config' / 'models').exists()
+
+
+def test_chosen_storage_rejects_relative_paths(tmp_path):
+    from comictranslate_it.easy_start import validate_storage_directory
+    with pytest.raises(ValueError):
+        validate_storage_directory('relative/subfolder')
+    with pytest.raises(ValueError):
+        validate_storage_directory('')
+
+
+def test_existing_model_can_move_to_second_drive(tmp_path, monkeypatch):
+    import comictranslate_it.easy_start as mod
+    first = tmp_path / 'first' / 'models' / 'm.onnx'
+    second = tmp_path / 'second' / 'models' / 'm.onnx'
+    first.parent.mkdir(parents=True)
+    first.write_bytes(b'model-for-simulation')
+    monkeypatch.setattr(mod, 'verify_model_file', lambda p: Path(p).read_bytes() == b'model-for-simulation')
+    assert mod.move_verified_model(first, second) == second
+    assert second.read_bytes() == b'model-for-simulation'
+    assert not first.exists()
+
+
+def test_model_migration_failure_keeps_source(tmp_path, monkeypatch):
+    import comictranslate_it.easy_start as mod
+    first=tmp_path / 'first.onnx'
+    second=tmp_path / 'other' / 'second.onnx'
+    first.write_bytes(b'old')
+    monkeypatch.setattr(mod, 'verify_model_file', lambda p: Path(p).read_bytes() == b'old')
+    second.parent.mkdir()
+    second.write_bytes(b'corrupt')
+    with pytest.raises(ValueError):
+        mod.move_verified_model(first, second)
+    assert first.read_bytes() == b'old'
+    assert second.read_bytes() == b'corrupt'
