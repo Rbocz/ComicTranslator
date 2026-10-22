@@ -18,13 +18,21 @@ COLORS={'dialogue':'#00e5ff','caption':'#ffe14a','thought':'#c084fc',
 
 
 class AnnotationEditor:
-    def __init__(self, archive_path: str, output_path: str, first_page:int=1):
+    def __init__(self, archive_path: str, output_path: str, first_page:int=1,
+                 detector: str = "baseline", model_file: str | None = None, threshold: float = .3):
         self.archive_path=Path(archive_path).resolve()
         self.out_path=Path(output_path).resolve()
         with Archive(self.archive_path) as archive:
             self.names=list(archive.names)
         if not 1<=first_page<=len(self.names):raise ValueError('Page out of range')
         self.data=load_annotations(self.out_path,self.archive_path.name)
+        self.detector_backend=detector
+        self.threshold=threshold
+        self.model=None
+        if detector=='onnx':
+            from .learned_detection import LearnedDetector
+            if not model_file:raise ValueError('ONNX detector requires --model-file')
+            self.model=LearnedDetector(model_file)
         self.page_index=first_page-1
         self.region_index=None
         self.pending=[]
@@ -80,7 +88,7 @@ class AnnotationEditor:
         ttk.Button(right,text='Annulla ultimo vertice (Backspace)',command=self._undo).pack(fill='x')
         ttk.Checkbutton(right,text='Pagina interamente controllata (completa)',
                         variable=self.verified,command=self._mark_verified).pack(anchor='w',pady=(13,4))
-        ttk.Label(right,text='Le linee azzurre/grigie tratteggiate sono SOLO suggerimenti. Le regioni colorate piene sono annotate a mano. Ogni balloon deve essere una regione distinta. Non selezionare intere vignette!',wraplength=310,justify='left').pack(anchor='w',pady=(22,0))
+        ttk.Label(right,text='Le linee tratteggiate sono SOLO suggerimenti: azzurro=balloon/testo, arancio=testo esterno. Il modello ONNX fornisce rettangoli approssimativi, NON contorni precisi. Annota ogni balloon manualmente prima di confermare la pagina.',wraplength=310,justify='left').pack(anchor='w',pady=(22,0))
         self.status=tk.StringVar(value='')
         ttk.Label(self.root,textvariable=self.status,padding=7,anchor='w').pack(fill='x')
         self.root.bind('<Control-s>',lambda e:self._save())
@@ -101,7 +109,7 @@ class AnnotationEditor:
     def _open_page(self):
         with Archive(self.archive_path) as archive:
             self.image=archive.image(self.names[self.page_index])
-        self.suggestions=proposal_regions(self.image)
+        self.suggestions=proposal_regions(self.image,self.detector_backend,self.model,self.threshold)
         self._page()
         self.verified.set(self._page().get('verified',False))
         self.current.set(f'Pagina {self.page_index+1}/{len(self.names)} — {self.names[self.page_index][-26:]}')
@@ -115,7 +123,8 @@ class AnnotationEditor:
             self.list.insert('end',f'{i+1:02}  {r["kind"]}  ({len(r["polygon"])} punti)')
         if self.region_index is not None and self.region_index<self.list.size():
             self.list.selection_set(self.region_index)
-        self.status.set(f'{len(self._page()["regions"])} regioni umane · {len(self.suggestions)} proposte · {'REVISIONATA' if self._page().get('verified') else 'BOZZA'}')
+        status = 'REVISIONATA' if self._page().get('verified') else 'BOZZA'
+        self.status.set(f'{len(self._page()["regions"])} regioni umane · {len(self.suggestions)} proposte · {status}')
 
     def _redraw(self):
         if not hasattr(self,'image') or not self.canvas.winfo_exists():return
@@ -131,7 +140,12 @@ class AnnotationEditor:
         if self.show_proposals.get():
             for r in self.suggestions:
                 coords=self._canvas_coords(r['polygon'])
-                canvas.create_polygon(*coords,outline='#8b8d93',fill='',dash=(5,4),width=2)
+                color='#ffad66' if r['kind']=='art_text' else '#76d7ff'
+                canvas.create_polygon(*coords,outline=color,fill='',dash=(5,4),width=2)
+                if r.get('source')=='ogkalu_rtdetr_v4s_onnx':
+                    canvas.create_text(coords[0]+4,coords[1]+4,anchor='nw',
+                        text=f"{r['role']} {r['confidence']:.2f}",fill=color,
+                        font=('Arial',8,'bold'))
         for i,r in enumerate(self._page()['regions']):
             coords=self._canvas_coords(r['polygon'])
             canvas.create_polygon(*coords,fill='',outline=COLORS[r['kind']],
@@ -256,5 +270,6 @@ class AnnotationEditor:
     def run(self):self.root.mainloop()
 
 
-def launch(archive_path:str, output_path:str, page:int=1):
-    AnnotationEditor(archive_path,output_path,page).run()
+def launch(archive_path:str, output_path:str, page:int=1,
+           detector:str="baseline",model_file:str|None=None,threshold:float=.3):
+    AnnotationEditor(archive_path,output_path,page,detector,model_file,threshold).run()
