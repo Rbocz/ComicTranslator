@@ -150,7 +150,8 @@ class Editor:
         except Exception as exc:
             self.status.set(str(exc));return
         if self.preview:
-            img,reports=render_page(img,self._page().regions,approval_required=False)
+            img,reports=render_page(img,self._page().regions,approval_required=False,
+                                    target_fill=self.project.lettering_profile.get("target_line_fill",.68))
             bad=[f"{r.id}: {r.message}" for r in reports if not r.applied]
             self.status.set("ANTEPRIMA | "+("; ".join(bad[:3]) if bad else "Nessuna anomalia rilevata dal motore locale"))
         width=max(1,self.canvas.winfo_width());height=max(1,self.canvas.winfo_height())

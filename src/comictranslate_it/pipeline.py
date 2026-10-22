@@ -56,7 +56,8 @@ def export(project: Project, destination: str, font_path: str | None=None):
     try:
         with Archive(project.source) as archive,zipfile.ZipFile(tmp,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as output:
             for page in project.pages:
-                image,reports=render_page(archive.image(page.filename),page.regions,font_path)
+                image,reports=render_page(archive.image(page.filename),page.regions,font_path,
+                                            target_fill=project.lettering_profile.get("target_line_fill",.68))
                 applied=any(r.applied for r in reports)
                 # Flatten output to RGB PNG iff modified. Original raw bytes remain otherwise.
                 if applied:

@@ -25,6 +25,27 @@ pytest -q
 ## Limiti
 Rilevamento e OCR non sono completi su balloon colorati e lettering elaborato. Pulizia OpenCV su sfondi complessi può lasciare artefatti. Il lettering è ancora monostile nero. Le traduzioni API richiedono revisione. Nessuna regione viene alterata se non è approvata e verificata dal motore. Usare solamente fumetti per i quali si possiedono i diritti necessari.
 
+## Benchmark su edizioni tradotte (v0.2 sperimentale)
+
+È disponibile un confronto **offline** di pagine inglesi e italiane, anche quando l'originale inglese contiene due pagine impilate. Il comando `reference-eval` calcola la trasformazione geometrica tramite SIFT/RANSAC e stima il riempimento tipografico delle righe italiane. `reference-profile` aggrega le misure; `apply-profile` memorizza nel progetto il riempimento medio desiderato, che il letterer usa come preferenza per suddividere le righe.
+
+Vedi [la guida completa](docs/REFERENCE_BENCHMARK.md). Sono necessarie poche righe leggibili con Tesseract `ita`: non è addestramento di una rete neurale. **Le scansioni originali non sono incluse nel repository.**
+
+## Abbinamento automatico CBR + riferimenti italiani (v0.3 sperimentale)
+
+`comictranslate reference-match "albo.cbr" "pagina-it.png" --out private_references/matches.json`
+identifica le pagine del capitolo inglese tramite caratteristiche grafiche SIFT+RANSAC.
+`comictranslate reference-dataset "albo.cbr" "pagina1-it.png" "pagina2-it.png" --out private_references/report`
+genera gli abbinamenti e i report offline, eliminando le duplicazioni delle pagine
+anche se hai fornito crop parziali dello stesso fumetto. Aggiungi `--overlays`
+soltanto quando desideri le anteprime private con le regioni rilevate.
+
+Per il flusso completo, consulta [la guida](docs/CBR_REFERENCE_WORKFLOW.md).
+I profili risultanti sono **provvisori**: non applicarli come verità editoriali
+finché il riconoscimento dei balloon non avrà una copertura adeguata.
+Su Windows è richiesto 7-Zip/UnRAR per CBR; su Linux/macOS è disponibile
+l'accesso opzionale tramite `libarchive` di sistema.
+
 ## Roadmap
 1. Benchmark controllato sui comics occidentali.
 2. Detector specifico e OCR robusto.
