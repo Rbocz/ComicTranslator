@@ -14,6 +14,7 @@ from urllib.request import urlopen, Request
 
 import cv2
 import numpy as np
+from .shape_refinement import refine_light_surface
 from PIL import Image
 
 MODEL_REPOSITORY = "ogkalu/comic-text-and-bubble-detector"
@@ -141,7 +142,8 @@ def _text_in_bubble(text:Detection,bubble:Detection):
     return b[0]<=cx<=b[2] and b[1]<=cy<=b[3] and intersection/area>=.60
 
 
-def make_region_proposals(detections:list[Detection],image_size:tuple[int,int]) -> list[dict]:
+def make_region_proposals(detections:list[Detection],image_size:tuple[int,int],
+                          image:Image.Image | None=None) -> list[dict]:
     """Attach text detections to enclosing bubbles; unmatched text stays distinct.
 
     Bounding boxes remain *approximate* polygons. No pixel-perfect mask is
@@ -171,10 +173,21 @@ def make_region_proposals(detections:list[Detection],image_size:tuple[int,int]) 
     result=[]
     for i,(kind,item,geometry,text_count,members) in enumerate(candidates,1):
         box=item.box
-        poly=[[round(x/w,6),round(y/h,6)] for x,y in _rect_polygon(box)]
+        outline=None
+        quality=None
+        if image is not None and kind=='dialogue':
+            text_box=None
+            if geometry=='balloon_box_approx' and members:
+                text_box=(min(d.box[0] for d in members),min(d.box[1] for d in members),
+                          max(d.box[2] for d in members),max(d.box[3] for d in members))
+            proposal=refine_light_surface(image,box,text_box=text_box)
+            if proposal is not None:
+                outline,quality=proposal
+        poly=[[round(x/w,6),round(y/h,6)] for x,y in (outline if outline else _rect_polygon(box))]
         result.append({"id":f"ml{i:03}","kind":kind,"polygon":poly,
             "source":"ogkalu_rtdetr_v4s_onnx", "confidence":round(item.score,4),
-            "geometry":"bounding_box_only", "role":geometry,
+            "geometry":"light_surface_candidate" if outline else "bounding_box_only",
+            "contour_quality":quality,"role":geometry,
             "text_region_count":text_count,"needs_review":True})
     return result
 
@@ -199,11 +212,32 @@ class LearnedDetector:
         if not {"images","orig_target_sizes"}<=input_names or not {"labels","boxes","scores"}<=output_names:
             raise ModelNotReady("Il file ONNX non espone input/output RT-DETR attesi")
 
-    def detections(self,image:Image.Image,threshold:float=.3):
+    def detections(self,image:Image.Image,threshold:float=.3,detail_pass:bool=False):
         feed=preprocess(image)
         names=["labels","boxes","scores"]
         raw=dict(zip(names,self.session.run(names,feed)))
-        return postprocess(raw,image.width,image.height,threshold)
+        found=postprocess(raw,image.width,image.height,threshold)
+        if detail_pass and min(image.size)>=900:
+            # Full page plus four overlapping crops to improve small-caption
+            # coverage. This is slower and results remain review-only.
+            w,h=image.size
+            tw=round(w*.64);th=round(h*.64)
+            for y in (0,h-th):
+                for x in (0,w-tw):
+                    crop=image.crop((x,y,x+tw,y+th))
+                    out=dict(zip(names,self.session.run(names,preprocess(crop))))
+                    for det in postprocess(out,tw,th,threshold):
+                        x1,y1,x2,y2=det.box
+                        found.append(Detection(det.cls,det.score,
+                                               (x1+x,y1+y,x2+x,y2+y)))
+            found.sort(key=lambda d:(-d.score,d.cls,d.box))
+            dedup=[]
+            for det in found:
+                if any(prev.cls==det.cls and _iou_box(det.box,prev.box)>.52 for prev in dedup):
+                    continue
+                dedup.append(det)
+            found=dedup
+        return found
 
-    def proposals(self,image:Image.Image,threshold:float=.3):
-        return make_region_proposals(self.detections(image,threshold),image.size)
+    def proposals(self,image:Image.Image,threshold:float=.3,detail_pass:bool=False):
+        return make_region_proposals(self.detections(image,threshold,detail_pass),image.size,image=image)
