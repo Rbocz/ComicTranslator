@@ -101,3 +101,15 @@ def test_billing_error_stops_future_requests_and_keeps_source(tmp_path):
     assert status.pages_done==1 and status.failed==1 and len(errors)==1
     assert all(not pg.regions for pg in project.pages)
     assert cbz.is_file() and zipfile.is_zipfile(cbz)
+def test_gemini_current_model_omits_deprecated_temperature():
+    from comictranslate_it.full_translate import DEFAULT_MODELS
+    assert DEFAULT_MODELS['Google Gemini'] == 'gemini-3.8-flash'
+    from PIL import Image
+    import json
+    def fake(url,payload,headers):
+        assert 'gemini-3.8-flash:generateContent' in url
+        assert 'temperature' not in payload['generationConfig']
+        assert payload['generationConfig']['thinkingConfig']['thinkingLevel']=='low'
+        return {'candidates':[{'content':{'parts':[{'text':json.dumps(PAYLOAD)}]}}]}
+    result=recognize_translate(page(),'Google Gemini','FAKE',DEFAULT_MODELS['Google Gemini'],http_client=fake)
+    assert len(result)==1
