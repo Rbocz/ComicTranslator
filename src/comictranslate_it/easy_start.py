@@ -6,6 +6,9 @@ Weights are downloaded ONLY after user confirmation, verified by SHA-256.
 from __future__ import annotations
 
 import os
+import json
+import shutil
+import tempfile
 from pathlib import Path
 import sys
 import threading
@@ -22,6 +25,82 @@ def user_data_directory() -> Path:
     else:
         root = Path.home() / ".local" / "share"
     return root / "ComicTranslator"
+
+
+
+def settings_path() -> Path:
+    """Only this tiny settings file remains in the default Windows app-data folder."""
+    return user_data_directory() / "settings.json"
+
+
+def load_storage_directory() -> Path:
+    """Use the user's chosen disk on subsequent launches; default is legacy AppData."""
+    try:
+        data = json.loads(settings_path().read_text(encoding="utf-8"))
+        path = Path(data["storage_directory"]).expanduser()
+        if path.is_absolute():
+            return path
+    except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+        pass
+    return user_data_directory()
+
+
+def validate_storage_directory(directory: str | Path) -> Path:
+    """Check that the requested drive exists and can be written to."""
+    if not str(directory).strip():
+        raise ValueError("Scegli una cartella per il modello sul secondo disco")
+    root = Path(directory).expanduser()
+    if not root.is_absolute():
+        raise ValueError("La cartella deve avere un percorso assoluto (es. D:\\ComicTranslator)")
+    root.mkdir(parents=True, exist_ok=True)
+    # A failed disk mount or a read-only drive must be reported before download.
+    with tempfile.NamedTemporaryFile(prefix="comictranslator-", dir=root, delete=True) as file:
+        file.write(b"disk-check")
+        file.flush()
+    return root.resolve()
+
+
+def save_storage_directory(root: Path) -> None:
+    """Persist selection atomically; never store the potentially large model here."""
+    root = validate_storage_directory(root)
+    file = settings_path()
+    file.parent.mkdir(parents=True, exist_ok=True)
+    temporary = file.with_suffix(".json.tmp")
+    try:
+        temporary.write_text(json.dumps({"storage_directory": str(root)}, indent=2), encoding="utf-8")
+        os.replace(temporary, file)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def move_verified_model(source: Path, destination: Path) -> Path:
+    """Copy to selected disk, verify SHA-256, then remove the old model.
+
+    On failure, keep the original intact and do not publish an unverified file.
+    """
+    source = Path(source).resolve()
+    destination = Path(destination).resolve()
+    if source == destination:
+        if not verify_model_file(source):
+            raise ValueError("Modello esistente non verificato")
+        return destination
+    if destination.exists():
+        if verify_model_file(destination):
+            return destination
+        raise ValueError("Esiste già un file modello non valido nella cartella scelta")
+    if not verify_model_file(source):
+        raise ValueError("Non trovo un modello integro nel percorso precedente")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    partial = destination.with_suffix(destination.suffix + ".transfer")
+    try:
+        shutil.copyfile(source, partial)
+        if not verify_model_file(partial):
+            raise ValueError("La copia sul secondo disco non ha superato la verifica SHA-256")
+        os.replace(partial, destination)
+        source.unlink()
+    finally:
+        partial.unlink(missing_ok=True)
+    return destination
 
 
 def annotation_path(archive: str | Path, root: Path | None = None) -> Path:
@@ -53,10 +132,11 @@ class StartWindow:
     def __init__(self, root: tk.Tk | None = None):
         self.root = root or tk.Tk()
         self.root.title("ComicTranslator — Avvio facile")
-        self.root.geometry("640x360")
+        self.root.geometry("700x465")
         self.root.resizable(False, False)
         self.source = tk.StringVar(value="")
         self.page = tk.StringVar(value="5")
+        self.storage = tk.StringVar(value=str(load_storage_directory()))
         self.status = tk.StringVar(value="Scegli il fumetto inglese che vuoi analizzare.")
         self._working = False
         self._construct()
@@ -77,7 +157,7 @@ class StartWindow:
         ttk.Entry(row, width=6, textvariable=self.page).pack(side="left", padx=(10, 0))
         ttk.Label(row, text="(per Absolute Batman inizia da 5)").pack(side="left", padx=(12, 0))
         self.launch_button = ttk.Button(panel, text="3. ANALIZZA I BALLOON", command=self._start)
-        self.launch_button.pack(fill="x", ipady=10, pady=(25, 8))
+        self.launch_button.pack(fill="x", ipady=10, pady=(18, 8))
         ttk.Label(panel, textvariable=self.status, wraplength=580, foreground="#455a64").pack(anchor="w")
         ttk.Label(panel, text="Primo uso: verrà richiesta la conferma per scaricare il modello ONNX. Le pagine non sono inviate online.",
                   wraplength=580, foreground="#555555").pack(anchor="w", pady=(13, 0))
@@ -88,11 +168,21 @@ class StartWindow:
         if path:
             self.source.set(path)
 
+    def _choose_storage(self):
+        initial = Path(self.storage.get())
+        base = initial if initial.is_dir() else (initial.parent if initial.parent.is_dir() else Path.home())
+        directory = filedialog.askdirectory(parent=self.root,
+                     title="Scegli una cartella sul secondo disco per il modello ONNX",
+                     initialdir=str(base), mustexist=True)
+        if directory:
+            self.storage.set(directory)
+
     def _start(self):
         if self._working:
             return
         try:
             source, page = validate_selection(self.source.get(), self.page.get())
+            storage_root = validate_storage_directory(self.storage.get())
             # Fast metadata check before prompting for any network activity.
             from .archives import Archive
             with Archive(source) as archive:
@@ -102,32 +192,53 @@ class StartWindow:
             messagebox.showerror("Non posso aprire il fumetto", str(exc), parent=self.root)
             return
 
-        path = model_path()
+        path = model_path(storage_root)
         if verify_model_file(path):
-            self._open_editor(source, page, path)
+            save_storage_directory(storage_root)
+            self._open_editor(source, page, path, storage_root)
             return
+        old_path = model_path(user_data_directory())
+        if old_path != path and verify_model_file(old_path):
+            relocate = messagebox.askyesno(
+                "Modello già presente sul primo disco",
+                f"Ho trovato un modello già scaricato in:\n{old_path}\n\n"
+                f"Vuoi SPOSTARLO qui, senza riscaricarlo?\n{path}", parent=self.root)
+            if relocate:
+                try:
+                    move_verified_model(old_path, path)
+                    save_storage_directory(storage_root)
+                    self._open_editor(source, page, path, storage_root)
+                except (OSError, ValueError) as exc:
+                    messagebox.showerror("Spostamento modello non riuscito", str(exc), parent=self.root)
+                return
         agree = messagebox.askyesno(
             "Modello di riconoscimento",
             "Per individuare i balloon devo scaricare una sola volta il modello ONNX "
-            "dalla sua fonte originale, controllandone l'integrità. Procedo?\n\n"
-            "Le tavole del fumetto restano sul tuo computer.", parent=self.root)
+            f"dalla sua fonte originale, controllandone l'integrità.\n\nDestinazione:\n{path}\n\n"
+            "Confermi il download in questa cartella? Le tavole restano sul tuo computer.",
+            parent=self.root)
         if not agree:
             self.status.set("Download annullato. Riprova quando vuoi.")
+            return
+        try:
+            save_storage_directory(storage_root)
+        except OSError as exc:
+            messagebox.showerror("Cartella non scrivibile", str(exc), parent=self.root)
             return
         self._working = True
         self.launch_button.state(["disabled"])
         self.status.set("Sto scaricando e verificando il modello. Connessione Internet necessaria solo ora...")
-        threading.Thread(target=self._fetch_in_worker, args=(source, page, path), daemon=True).start()
+        threading.Thread(target=self._fetch_in_worker, args=(source, page, path, storage_root), daemon=True).start()
 
-    def _fetch_in_worker(self, source: Path, page: int, path: Path):
+    def _fetch_in_worker(self, source: Path, page: int, path: Path, storage_root: Path):
         try:
             fetch_model(path)
-            self.root.after(0, lambda: self._download_finished(source, page, path, None))
+            self.root.after(0, lambda: self._download_finished(source, page, path, storage_root, None))
         except Exception as exc:
             msg = str(exc)
-            self.root.after(0, lambda: self._download_finished(source, page, path, msg))
+            self.root.after(0, lambda: self._download_finished(source, page, path, storage_root, msg))
 
-    def _download_finished(self, source: Path, page: int, path: Path, error: str | None):
+    def _download_finished(self, source: Path, page: int, path: Path, storage_root: Path, error: str | None):
         self._working = False
         self.launch_button.state(["!disabled"])
         if error:
@@ -135,16 +246,16 @@ class StartWindow:
             messagebox.showerror("Download non riuscito", error, parent=self.root)
             return
         self.status.set("Modello pronto. Apro l'annotatore...")
-        self._open_editor(source, page, path)
+        self._open_editor(source, page, path, storage_root)
 
-    def _open_editor(self, source: Path, page: int, path: Path):
+    def _open_editor(self, source: Path, page: int, path: Path, storage_root: Path):
         if not verify_model_file(path):
             messagebox.showerror("Modello non valido", "File ONNX mancante o non verificato", parent=self.root)
             return
         try:
             from .annotation_editor import AnnotationEditor
             # Explicit constructor allows a friendly error before changing windows.
-            editor = AnnotationEditor(str(source), str(annotation_path(source)), page,
+            editor = AnnotationEditor(str(source), str(annotation_path(source, storage_root)), page,
                                       "onnx", str(path))
         except Exception as exc:
             messagebox.showerror("Impossibile aprire l'annotatore", str(exc), parent=self.root)
