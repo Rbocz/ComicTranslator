@@ -21,3 +21,8 @@ dell'errore. Non e' ancora un traduttore automatico editoriale completo.
 CBR: usa 7-Zip fornito nel pacchetto. 7-Zip e' un software terzo con licenze
 LGPL/BSD e restrizioni unRAR: https://www.7-zip.org/license.txt.
 Le comunicazioni sul software di terzi sono riportate nella cartella tools/.
+
+Aggiornamento v0.6.1: corretto l'entrypoint dell'app compilata.
+La pipeline Windows esegue ora un vero controllo di avvio del file ComicTranslator.exe
+prima di pubblicare lo ZIP. Se hai scaricato la build precedente all'aggiornamento,
+cancellala e usa la nuova build verificata.

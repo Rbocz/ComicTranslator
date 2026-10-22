@@ -5,6 +5,13 @@ on:
     branches: [main]
     paths:
       - "src/**"
+      - "windows_entry.py"
+      - "pyproject.toml"
+      - ".github/workflows/windows-portable.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "windows_entry.py"
       - "pyproject.toml"
       - ".github/workflows/windows-portable.yml"
   workflow_dispatch:
@@ -31,7 +38,7 @@ jobs:
         run: python -m pytest -q
       - name: Build desktop application
         run: |
-          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ComicTranslator --paths src --collect-all onnxruntime src/comictranslate_it/easy_start.py
+          python -m PyInstaller --noconfirm --clean --onedir --windowed --name ComicTranslator --paths src --collect-all onnxruntime windows_entry.py
       - name: Include 7-Zip for CBR files
         shell: pwsh
         run: |
@@ -55,6 +62,24 @@ jobs:
         run: |
           foreach ($file in @("dist\ComicTranslator\ComicTranslator.exe", "dist\ComicTranslator\tools\7z.exe", "dist\ComicTranslator\tools\7z.dll")) {
             if (-not (Test-Path $file)) { throw "Portable missing required file: $file" }
+          }
+      - name: Smoke-test the built executable (not just Python imports)
+        shell: pwsh
+        run: |
+          $marker = Join-Path $env:RUNNER_TEMP "comictranslator-startup.json"
+          if (Test-Path $marker) { Remove-Item $marker -Force }
+          $exe = (Resolve-Path "dist\ComicTranslator\ComicTranslator.exe").Path
+          $process = Start-Process -FilePath $exe -ArgumentList @("--self-test", $marker) -PassThru
+          if (-not $process.WaitForExit(60000)) {
+            $process.Kill()
+            throw "Packaged .exe did not finish startup verification in 60 seconds"
+          }
+          if (Test-Path $marker) { Write-Host (Get-Content $marker -Raw) }
+          if ($process.ExitCode -ne 0) { throw "Packaged .exe failed with exit code $($process.ExitCode)" }
+          if (-not (Test-Path $marker)) { throw "No startup result produced by the packaged .exe" }
+          $result = Get-Content $marker -Raw | ConvertFrom-Json
+          if ($result.status -ne "ok" -or $result.bundled_7zip -ne $true) {
+            throw "Startup validation did not confirm packaged dependencies"
           }
       - name: Publish portable ZIP artifact
         uses: actions/upload-artifact@v4
