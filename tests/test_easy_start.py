@@ -115,8 +115,10 @@ def test_visible_storage_picker_is_present_and_before_analyze():
         assert app.storage_picker.winfo_manager() == 'pack'
         assert app.storage_entry.winfo_manager() == 'pack'
         assert app.storage_picker.cget('command')
-        assert app.storage_picker.winfo_rooty() < app.launch_button.winfo_rooty()
-        assert app.launch_button.winfo_rooty() + app.launch_button.winfo_height() <= (
-            app.root.winfo_rooty() + app.root.winfo_height())
+        storage_row = app.storage_picker.master
+        panel = app.launch_button.master
+        assert storage_row.winfo_manager() == 'pack'
+        assert storage_row in panel.pack_slaves()
+        assert panel.pack_slaves().index(storage_row) < panel.pack_slaves().index(app.launch_button)
     finally:
         app.root.destroy()
