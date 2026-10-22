@@ -78,7 +78,7 @@ jobs:
           if ($process.ExitCode -ne 0) { throw "Packaged .exe failed with exit code $($process.ExitCode)" }
           if (-not (Test-Path $marker)) { throw "No startup result produced by the packaged .exe" }
           $result = Get-Content $marker -Raw | ConvertFrom-Json
-          if ($result.status -ne "ok" -or $result.bundled_7zip -ne $true -or $result.storage_picker_visible -ne $true) {
+          if ($result.status -ne "ok" -or $result.bundled_7zip -ne $true -or $result.storage_picker_visible -ne $true -or $result.editor_photo_valid -ne $true) {
             throw "Startup validation did not confirm packaged dependencies"
           }
       - name: Publish portable ZIP artifact
