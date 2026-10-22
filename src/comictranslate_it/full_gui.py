@@ -155,8 +155,9 @@ class TranslateWindow:
                 else:applied=blocked=0
                 self._events.put(('done',status.pages_done,status.pages_total,len(errors),applied,blocked))
             except Exception as exc:self._events.put(('error',str(exc)))
-            finally:
-                api_key=''  # Not persisted to project or settings.
+        # Never keep the API secret in the visible input; the worker holds only
+        # a transient in-memory copy until it completes, not a saved setting.
+        self.key.set('')
         self._worker=threading.Thread(target=work,daemon=True);self._worker.start()
 
     def _poll(self):
