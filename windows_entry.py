@@ -26,10 +26,27 @@ def frozen_startup_test(marker: str) -> int:
         valid_7zip = packaged and bundled.is_file() and Path(rarfile.SEVENZIP_TOOL).resolve() == bundled
         if not packaged or not valid_7zip:
             raise RuntimeError("7-Zip was not configured from the portable application folder")
+        # The previous installer was shipped without a visible folder picker:
+        # execute a frozen GUI construction test, not only an import check.
+        ui = StartWindow()
+        try:
+            ui.root.update_idletasks()
+            storage_button_visible = (
+                ui.storage_picker.winfo_manager() == "pack"
+                and ui.storage_entry.winfo_manager() == "pack"
+                and ui.storage_picker.winfo_rooty() < ui.launch_button.winfo_rooty()
+                and ui.storage_picker.winfo_rooty() + ui.storage_picker.winfo_height()
+                <= ui.root.winfo_rooty() + ui.root.winfo_height()
+            )
+            if not storage_button_visible:
+                raise RuntimeError("Storage folder picker is missing or hidden in the main window")
+        finally:
+            ui.root.destroy()
         payload = {
             "status": "ok",
             "frozen": packaged,
             "bundled_7zip": valid_7zip,
+            "storage_picker_visible": storage_button_visible,
             "model": MODEL_FILENAME,
             "onnxruntime": onnxruntime.__version__
         }
