@@ -87,6 +87,25 @@ def render_page(image: Image.Image, regions: list[Region], font_path: str | None
             continue
         try:
             safe=balloon_mask((image.width,image.height),region)
+            if region.source.startswith('vision-api'):
+                # Vision models provide approximate rectangles, not verified masks.
+                # Fail closed on art/color-rich backgrounds rather than erasing art.
+                bx=region.balloon.clamp(image.width,image.height)
+                crop=current[bx.y1:bx.y2,bx.x1:bx.x2]
+                valid=safe[bx.y1:bx.y2,bx.x1:bx.x2].astype(bool)
+                sample=valid.copy()
+                for word in region.words:
+                    r=word.clamp(image.width,image.height)
+                    sample[max(0,r.y1-bx.y1):max(0,r.y2-bx.y1),
+                           max(0,r.x1-bx.x1):max(0,r.x2-bx.x1)]=False
+                light=(crop.min(axis=2)>222)
+                if sample.sum()<150 or float(np.mean(light[sample]))<.79:
+                    raise ValueError('Balloon/sfondo non uniforme: revisione necessaria')
+                for word in region.words:
+                    r=word.clamp(image.width,image.height)
+                    patch=current[r.y1:r.y2,r.x1:r.x2]
+                    if patch.size and float(np.mean(patch.min(axis=2)<90))>.55:
+                        raise ValueError('Testo troppo vicino a bordi/disegni: revisione necessaria')
             layout=layout_text(region,(image.width,image.height),font_path,target_fill)
             erased,erase_mask,method=erase_text(current,region,safe)
             alpha=np.asarray(layout.ink_mask,dtype=np.uint8)

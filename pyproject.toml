@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "comictranslate-it"
-version = "0.5.0a1"
-description = "Conservative comic lettering workflow for English-to-Italian CBZ/CBR"
+version = "0.8.0b1"
+description = "Resumable English-to-Italian CBR/CBZ vision translation and local lettering workflow"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}

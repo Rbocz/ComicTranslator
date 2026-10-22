@@ -132,8 +132,8 @@ class StartWindow:
     def __init__(self, root: tk.Tk | None = None):
         self.root = root or tk.Tk()
         self.root.title("ComicTranslator — Avvio facile")
-        self.root.geometry("760x520")
-        self.root.minsize(620, 420)
+        self.root.geometry("790x640")
+        self.root.minsize(660, 520)
         self.root.resizable(True, True)
         self.source = tk.StringVar(value="")
         self.page = tk.StringVar(value="5")
@@ -146,7 +146,7 @@ class StartWindow:
         panel = ttk.Frame(self.root, padding=22)
         panel.pack(fill="both", expand=True)
         ttk.Label(panel, text="ComicTranslator", font=("Segoe UI", 22, "bold")).pack(anchor="w")
-        ttk.Label(panel, text="Riconosci i balloon e correggili, senza modificare le tavole originali.").pack(anchor="w", pady=(2, 22))
+        ttk.Label(panel, text="Apri un CBR/CBZ, traduci in italiano ed esporta. Il riconoscimento manuale è facoltativo.").pack(anchor="w", pady=(2, 14))
         ttk.Label(panel, text="1. Seleziona un fumetto .CBR o .CBZ").pack(anchor="w")
         file_row = ttk.Frame(panel)
         file_row.pack(fill="x", pady=(5, 13))
@@ -168,11 +168,23 @@ class StartWindow:
         self.storage_entry.pack(side="left", fill="x", expand=True)
         self.storage_picker = ttk.Button(storage_row, text="Scegli cartella...", command=self._choose_storage)
         self.storage_picker.pack(side="left", padx=(8, 0))
-        self.launch_button = ttk.Button(panel, text="4. ANALIZZA I BALLOON", command=self._start)
+        self.translate_button=ttk.Button(panel,
+            text="★ TRADUCI IL FUMETTO COMPLETO (Google / OpenAI)",
+            command=self._translate_full)
+        self.translate_button.pack(fill="x",ipady=13,pady=(11,4))
+        ttk.Label(panel,text="Traduzione completa: richiede una chiave API inserita nell'app. Le immagini vengono inviate solo con il tuo consenso.",
+                  wraplength=680).pack(anchor="w",pady=(2,8))
+        ttk.Separator(panel,orient="horizontal").pack(fill="x",pady=(5,8))
+        self.launch_button = ttk.Button(panel, text="STRUMENTI AVANZATI: ANALIZZA I BALLOON", command=self._start)
         self.launch_button.pack(fill="x", ipady=9, pady=(13, 8))
         ttk.Label(panel, textvariable=self.status, wraplength=580, foreground="#455a64").pack(anchor="w")
-        ttk.Label(panel, text="Primo uso: verrà richiesta la conferma per scaricare il modello ONNX. Le pagine non sono inviate online.",
+        ttk.Label(panel, text="Solo analisi manuale: modello ONNX locale. La traduzione completa è separata e invia le immagini al provider scelto dopo conferma.",
                   wraplength=580, foreground="#555555").pack(anchor="w", pady=(13, 0))
+
+    def _translate_full(self):
+        """Launch the complete batch translator as a child of this Tk root."""
+        from .full_gui import launch
+        launch(parent=self.root,source_path=self.source.get())
 
     def _browse(self):
         path = filedialog.askopenfilename(parent=self.root, title="Apri il fumetto inglese",

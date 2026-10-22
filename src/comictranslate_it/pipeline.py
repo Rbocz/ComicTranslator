@@ -56,6 +56,15 @@ def export(project: Project, destination: str, font_path: str | None=None):
     try:
         with Archive(project.source) as archive,zipfile.ZipFile(tmp,"w",compression=zipfile.ZIP_DEFLATED,compresslevel=6) as output:
             for page in project.pages:
+                if not any(r.approved and r.italian.strip() for r in page.regions):
+                    # Skip expensive full-raster work and preserve original bytes unchanged.
+                    output.writestr(page.filename,archive.raw(page.filename))
+                    used.add(page.filename.casefold())
+                    log.append({"page":page.filename,"modified":False,
+                                "regions":[{"id":r.id,"applied":False,
+                                            "message":"Non approvato oppure privo di traduzione"}
+                                           for r in page.regions]})
+                    continue
                 image,reports=render_page(archive.image(page.filename),page.regions,font_path,
                                             target_fill=project.lettering_profile.get("target_line_fill",.68))
                 applied=any(r.applied for r in reports)
