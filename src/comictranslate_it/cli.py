@@ -7,6 +7,7 @@ from .pipeline import scan, translate, export
 from .reference_benchmark import evaluate, write_profile
 from .reference_matching import match_references, save_matches
 from .reference_dataset import prepare_dataset
+from .annotations import load_annotations, benchmark_archive
 
 
 def main(argv=None):
@@ -37,6 +38,12 @@ def main(argv=None):
     ds=sub.add_parser("reference-dataset",help="Abbina, misura e calibra riferimenti EN/IT")
     ds.add_argument("archive");ds.add_argument("italian",nargs="+")
     ds.add_argument("--out",required=True);ds.add_argument("--overlays",action="store_true")
+    anno=sub.add_parser("annotate",help="Disegna e verifica balloon ground truth direttamente sul CBR")
+    anno.add_argument("archive");anno.add_argument("--out",required=True)
+    anno.add_argument("--page",type=int,default=1)
+    checks=sub.add_parser("detector-eval",help="Valuta precision/recall detector su pagine verificate")
+    checks.add_argument("archive");checks.add_argument("annotations")
+    checks.add_argument("--out",required=True)
     args=parser.parse_args(argv)
     try:
         if args.action=="init":
@@ -78,6 +85,15 @@ def main(argv=None):
             p.lettering_profile={"target_line_fill":float(fill)}
             p.save()
             print(f"Profilo impostato: {fill}")
+        elif args.action=="annotate":
+            from .annotation_editor import launch as open_annotator
+            open_annotator(args.archive,args.out,args.page)
+        elif args.action=="detector-eval":
+            data=load_annotations(args.annotations,Path(args.archive).name)
+            result=benchmark_archive(args.archive,data)
+            file=Path(args.out);file.parent.mkdir(parents=True,exist_ok=True)
+            file.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
+            print(f"Valutate {len(result['pages'])} pagine: {result['overall']}")
         elif args.action=="gui":
             from .gui import launch
             launch(args.project)
